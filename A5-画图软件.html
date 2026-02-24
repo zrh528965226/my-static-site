@@ -1,0 +1,696 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>图像修改</title>
+    <style>
+        :root{
+            --bg:#0b0f17;
+            --panel:#121a2a;
+            --panel2:#0f1626;
+            --text:#e9eefc;
+            --muted:#9fb0d0;
+            --border:#263450;
+            --btn:#1b2a46;
+            --btn2:#23385f;
+            --accent:#5aa2ff;
+        }
+        *{box-sizing:border-box}
+        body{
+            margin:0;
+            font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "PingFang SC", "Microsoft YaHei", sans-serif;
+            background:linear-gradient(180deg,#070a10 0%, #0b0f17 60%, #080b12 100%);
+            color:var(--text);
+        }
+        .wrap{
+            width:min(1400px, 96vw);
+            margin:18px auto 26px;
+        }
+        .title{
+            display:flex;
+            align-items:flex-end;
+            justify-content:space-between;
+            gap:12px;
+            padding:14px 16px;
+            background:linear-gradient(180deg, rgba(18,26,42,.95), rgba(18,26,42,.65));
+            border:1px solid var(--border);
+            border-radius:14px;
+            box-shadow:0 12px 35px rgba(0,0,0,.35);
+        }
+        .title h1{
+            margin:0;
+            font-size:22px;
+            letter-spacing:.5px;
+        }
+        .title .hint{
+            color:var(--muted);
+            font-size:12px;
+            line-height:1.4;
+            text-align:right;
+        }
+
+        .toolbar{
+            margin-top:12px;
+            padding:10px 10px;
+            background:rgba(18,26,42,.7);
+            border:1px solid var(--border);
+            border-radius:14px;
+            display:flex;
+            flex-wrap:wrap;
+            gap:8px;
+            align-items:center;
+        }
+        .group{
+            display:flex;
+            gap:8px;
+            padding:6px;
+            border:1px dashed rgba(90,162,255,.25);
+            border-radius:12px;
+            background:rgba(15,22,38,.55);
+            align-items:center;
+            flex-wrap:wrap;
+        }
+        .group .label{
+            font-size:12px;
+            color:var(--muted);
+            padding:0 4px;
+            user-select:none;
+        }
+        button, select, input[type="color"], input[type="range"], input[type="text"], input[type="number"]{
+            background:var(--btn);
+            color:var(--text);
+            border:1px solid rgba(255,255,255,.08);
+            border-radius:10px;
+            padding:8px 10px;
+            font-size:13px;
+            outline:none;
+        }
+        input[type="text"]{ width:220px; }
+        input[type="number"]{ width:90px; }
+        button{ cursor:pointer; }
+        button:hover{ background:var(--btn2); }
+        button.active{
+            background:rgba(90,162,255,.18);
+            border-color:rgba(90,162,255,.55);
+            box-shadow:0 0 0 2px rgba(90,162,255,.18) inset;
+        }
+        button.danger{
+            background:rgba(255,99,99,.12);
+            border-color:rgba(255,99,99,.35);
+        }
+        button.danger:hover{ background:rgba(255,99,99,.18); }
+
+        .big-box{
+            margin-top:12px;
+            padding:14px;
+            background:linear-gradient(180deg, rgba(18,26,42,.78), rgba(12,17,28,.7));
+            border:1px solid var(--border);
+            border-radius:18px;
+            box-shadow:0 16px 45px rgba(0,0,0,.45);
+        }
+        .big-box-head{
+            display:flex;
+            align-items:center;
+            justify-content:space-between;
+            gap:10px;
+            margin-bottom:10px;
+        }
+        .big-box-head .name{
+            font-weight:700;
+            font-size:16px;
+            letter-spacing:.4px;
+        }
+        .big-box-head .sub{
+            font-size:12px;
+            color:var(--muted);
+        }
+
+        /* 框格：上下左右滚动 */
+        .canvas-shell{
+            width:100%;
+            height:min(80vh, 850px);
+            border-radius:14px;
+            border:1px solid rgba(255,255,255,.07);
+            background:radial-gradient(80% 80% at 50% 0%, rgba(90,162,255,.10), transparent 55%),
+            rgba(8,12,20,.65);
+            overflow:auto;
+            position:relative;
+        }
+        .canvas-inner{
+            position:relative;
+            width:max-content;
+            height:max-content;
+            padding:10px;
+        }
+        canvas{ display:block; background:transparent; }
+
+        .footer-tip{
+            margin-top:10px;
+            color:var(--muted);
+            font-size:12px;
+            line-height:1.5;
+        }
+        kbd{
+            background:rgba(255,255,255,.08);
+            border:1px solid rgba(255,255,255,.12);
+            padding:2px 6px;
+            border-radius:6px;
+            font-size:12px;
+        }
+    </style>
+</head>
+<body>
+<div class="wrap">
+    <div class="title">
+        <h1>图像修改</h1>
+        <div class="hint">
+            支持：粘贴多图 / 拖拽缩放 / 画笔 / 矩形 / 圆形 / 直线 / 箭头直线 / 贴编号 / 文本 / 截图(白底) / 撤销重做 / 平移滚动
+        </div>
+    </div>
+
+    <div class="toolbar" id="toolbar">
+        <div class="group">
+            <span class="label">工具</span>
+            <button data-tool="select" class="active">选择/移动</button>
+            <button data-tool="brush">画笔</button>
+            <button data-tool="rect">矩形</button>
+            <button data-tool="circle">圆形</button>
+            <button data-tool="line">直线</button>
+            <button data-tool="arrow">箭头直线</button>
+        </div>
+
+        <div class="group">
+            <span class="label">样式</span>
+            <select id="strokeMode">
+                <option value="stroke">描边</option>
+                <option value="fill">填充</option>
+                <option value="both">描边+填充</option>
+            </select>
+            <input type="color" id="strokeColor" value="#5aa2ff" title="颜色" />
+            <input type="range" id="strokeWidth" min="1" max="30" value="4" title="粗细" />
+        </div>
+
+        <div class="group">
+            <span class="label">文本</span>
+            <input type="text" id="textInput" placeholder="输入文本后点击添加" />
+            <input type="color" id="textColor" value="#ffffff" title="字体颜色" />
+            <input type="number" id="textSize" value="32" min="10" max="200" title="字体大小" />
+            <button id="addText">添加文本</button>
+            <button id="applyTextStyle">应用到选中文本</button>
+            <button id="deleteSelected" class="danger">删除选中</button>
+        </div>
+
+        <div class="group">
+            <span class="label">编号</span>
+            <select id="numSelect">
+                <option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5">5</option>
+                <option value="6">6</option><option value="7">7</option><option value="8">8</option><option value="9">9</option><option value="10">10</option>
+            </select>
+            <button id="addNum">贴编号</button>
+        </div>
+
+        <div class="group">
+            <span class="label">历史</span>
+            <button id="undo">返回上一步/撤销</button>
+            <button id="redo">重做</button>
+        </div>
+
+        <div class="group">
+            <span class="label">导出</span>
+            <button id="shot">截图保存(白底)</button>
+            <button id="clear" class="danger">清空</button>
+        </div>
+    </div>
+
+    <div class="big-box">
+        <div class="big-box-head">
+            <div>
+                <div class="name">大框格（编辑区）</div>
+                <div class="sub">
+                    粘贴图片：<kbd>Ctrl</kbd>+<kbd>V</kbd> ｜ 删除：<kbd>Delete</kbd> ｜ 滚动：滚轮/触控板（可上下左右）
+                </div>
+            </div>
+        </div>
+
+        <div class="canvas-shell" id="shell">
+            <div class="canvas-inner">
+                <!-- 高度从 3500 缩小两倍到 1750 -->
+                <canvas id="c" width="1200" height="1750"></canvas>
+            </div>
+        </div>
+
+        <div class="footer-tip">
+            文本：双击可编辑；选中后可拖动；可改颜色/大小并“应用到选中文本”。<br/>
+            箭头直线：拖拽绘制；选择工具下可移动/缩放（整体）。
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/fabric@5.3.0/dist/fabric.min.js"></script>
+<script>
+    // ===== 画布 =====
+    const canvas = new fabric.Canvas('c', {
+        preserveObjectStacking: true,
+        selection: true
+    });
+
+    // 背景透明（界面保持深色框格风格）
+    canvas.setBackgroundColor(null, canvas.renderAll.bind(canvas));
+
+    // ===== 历史（撤销/重做）- 防抖 =====
+    const history = [];
+    let historyIndex = -1;
+    let isRestoring = false;
+    let historyQueued = false;
+
+    function pushHistorySoon(){
+        if(isRestoring) return;
+        if(historyQueued) return;
+        historyQueued = true;
+        setTimeout(() => {
+            historyQueued = false;
+            const json = canvas.toDatalessJSON(['dataType','isArrow']);
+            history.splice(historyIndex + 1);
+            history.push(json);
+            historyIndex = history.length - 1;
+            updateHistoryButtons();
+        }, 0);
+    }
+
+    function restoreFrom(index){
+        if(index < 0 || index >= history.length) return;
+        isRestoring = true;
+        canvas.loadFromJSON(history[index], () => {
+            canvas.renderAll();
+            isRestoring = false;
+            updateHistoryButtons();
+        });
+    }
+
+    function updateHistoryButtons(){
+        document.getElementById('undo').disabled = historyIndex <= 0;
+        document.getElementById('redo').disabled = historyIndex >= history.length - 1;
+    }
+
+    pushHistorySoon();
+
+    canvas.on('object:modified', pushHistorySoon);
+    canvas.on('object:removed', pushHistorySoon);
+    canvas.on('path:created', pushHistorySoon);
+    canvas.on('object:added', (e) => {
+        if (!e || !e.target) return;
+        pushHistorySoon();
+    });
+
+    // ===== 工具状态 =====
+    const toolButtons = [...document.querySelectorAll('[data-tool]')];
+    const strokeColorEl = document.getElementById('strokeColor');
+    const strokeWidthEl = document.getElementById('strokeWidth');
+    const strokeModeEl  = document.getElementById('strokeMode');
+
+    let currentTool = 'select';
+    let isDrawingShape = false;
+    let shapeStart = null;
+    let tempObj = null;
+
+    window.addEventListener('keydown', (e)=>{
+        if(e.key === 'Delete' || e.key === 'Backspace') deleteSelectedObjects();
+    });
+
+    function setActiveTool(tool){
+        currentTool = tool;
+        toolButtons.forEach(b => b.classList.toggle('active', b.dataset.tool === tool));
+
+        canvas.isDrawingMode = false;
+        canvas.selection = (tool === 'select');
+        canvas.defaultCursor = (tool === 'select') ? 'default' : 'crosshair';
+
+        canvas.forEachObject(obj => obj.selectable = (tool === 'select'));
+        canvas.requestRenderAll();
+
+        if(tool === 'brush'){
+            canvas.isDrawingMode = true;
+            canvas.freeDrawingBrush = new fabric.PencilBrush(canvas);
+            canvas.freeDrawingBrush.color = strokeColorEl.value;
+            canvas.freeDrawingBrush.width = Number(strokeWidthEl.value);
+            canvas.freeDrawingBrush.decimate = 0.4;
+        }
+
+        isDrawingShape = false;
+        shapeStart = null;
+        tempObj = null;
+    }
+
+    toolButtons.forEach(btn=>{
+        btn.addEventListener('click', ()=> setActiveTool(btn.dataset.tool));
+    });
+
+    function getStyle(){
+        const color = strokeColorEl.value;
+        const w = Number(strokeWidthEl.value);
+        const mode = strokeModeEl.value;
+        let fill = 'rgba(0,0,0,0)';
+        if(mode === 'fill') fill = hexToRgba(color, 0.20);
+        if(mode === 'both') fill = hexToRgba(color, 0.15);
+        const stroke = (mode === 'fill') ? 'rgba(0,0,0,0)' : color;
+        return { stroke, fill, w, color };
+    }
+
+    strokeColorEl.addEventListener('input', ()=>{
+        if(canvas.isDrawingMode && canvas.freeDrawingBrush) canvas.freeDrawingBrush.color = strokeColorEl.value;
+    });
+    strokeWidthEl.addEventListener('input', ()=>{
+        if(canvas.isDrawingMode && canvas.freeDrawingBrush) canvas.freeDrawingBrush.width = Number(strokeWidthEl.value);
+    });
+
+    // ===== 形状绘制（rect/circle/line/arrow） =====
+    canvas.on('mouse:down', (opt)=>{
+        if(currentTool === 'select' || currentTool === 'brush') return;
+
+        const pointer = canvas.getPointer(opt.e);
+        const { stroke, fill, w, color } = getStyle();
+
+        isDrawingShape = true;
+        shapeStart = pointer;
+
+        if(currentTool === 'rect'){
+            tempObj = new fabric.Rect({
+                left: pointer.x, top: pointer.y,
+                width: 1, height: 1,
+                stroke, fill,
+                strokeWidth: w,
+                selectable: false,
+                objectCaching: false
+            });
+            canvas.add(tempObj);
+        }else if(currentTool === 'circle'){
+            tempObj = new fabric.Ellipse({
+                left: pointer.x, top: pointer.y,
+                rx: 1, ry: 1,
+                stroke, fill,
+                strokeWidth: w,
+                selectable: false,
+                objectCaching: false,
+                originX: 'left',
+                originY: 'top'
+            });
+            canvas.add(tempObj);
+        }else if(currentTool === 'line'){
+            tempObj = new fabric.Line([pointer.x, pointer.y, pointer.x, pointer.y], {
+                stroke: color,
+                strokeWidth: w,
+                selectable: false,
+                evented: false,
+                objectCaching: false
+            });
+            canvas.add(tempObj);
+        }else if(currentTool === 'arrow'){
+            const line = new fabric.Line([pointer.x, pointer.y, pointer.x, pointer.y], {
+                stroke: color,
+                strokeWidth: w,
+                selectable: false,
+                evented: false,
+                objectCaching: false
+            });
+
+            const head = new fabric.Triangle({
+                left: pointer.x,
+                top: pointer.y,
+                width: 16 + w * 1.2,
+                height: 20 + w * 1.6,
+                fill: color,
+                originX: 'center',
+                originY: 'center',
+                angle: 0,
+                selectable: false,
+                evented: false
+            });
+
+            const grp = new fabric.Group([line, head], { selectable:false, evented:false });
+            grp.isArrow = true;
+            tempObj = grp;
+            canvas.add(grp);
+        }
+    });
+
+    canvas.on('mouse:move', (opt)=>{
+        if(!isDrawingShape || !tempObj) return;
+        const pointer = canvas.getPointer(opt.e);
+
+        if(currentTool === 'rect'){
+            const ww = pointer.x - shapeStart.x;
+            const hh = pointer.y - shapeStart.y;
+            tempObj.set({
+                left: Math.min(pointer.x, shapeStart.x),
+                top:  Math.min(pointer.y, shapeStart.y),
+                width: Math.abs(ww),
+                height: Math.abs(hh)
+            });
+        }else if(currentTool === 'circle'){
+            const rx = Math.abs(pointer.x - shapeStart.x) / 2;
+            const ry = Math.abs(pointer.y - shapeStart.y) / 2;
+            tempObj.set({
+                left: Math.min(pointer.x, shapeStart.x),
+                top:  Math.min(pointer.y, shapeStart.y),
+                rx, ry
+            });
+        }else if(currentTool === 'line'){
+            tempObj.set({ x2: pointer.x, y2: pointer.y });
+        }else if(currentTool === 'arrow'){
+            updateArrowGroup(tempObj, shapeStart.x, shapeStart.y, pointer.x, pointer.y);
+        }
+
+        canvas.requestRenderAll();
+    });
+
+    canvas.on('mouse:up', ()=>{
+        if(currentTool === 'select' || currentTool === 'brush') return;
+        if(!isDrawingShape) return;
+
+        isDrawingShape = false;
+        if(tempObj){
+            tempObj.set({ selectable: true, evented: true });
+            tempObj = null;
+        }
+        canvas.requestRenderAll();
+    });
+
+    function updateArrowGroup(grp, x1, y1, x2, y2){
+        const line = grp.item(0);
+        const head = grp.item(1);
+        line.set({ x1, y1, x2, y2 });
+        head.set({ left: x2, top: y2 });
+        const angle = Math.atan2(y2 - y1, x2 - x1) * 180 / Math.PI + 90;
+        head.set({ angle });
+        grp._calcBounds();
+        grp._updateObjectsCoords();
+        grp.setCoords();
+    }
+
+    // ===== 编号 =====
+    document.getElementById('addNum').addEventListener('click', ()=>{
+        const n = document.getElementById('numSelect').value;
+        const { stroke, fill, w, color } = getStyle();
+
+        const circle = new fabric.Circle({
+            radius: 22,
+            fill: fill === 'rgba(0,0,0,0)' ? 'rgba(90,162,255,.18)' : fill,
+            stroke: stroke === 'rgba(0,0,0,0)' ? color : stroke,
+            strokeWidth: Math.max(2, Math.min(6, w)),
+            originX:'center',
+            originY:'center'
+        });
+        const text = new fabric.Text(String(n),{
+            fontSize: 20,
+            fill: '#ffffff',
+            fontWeight: '700',
+            originX:'center',
+            originY:'center'
+        });
+        const grp = new fabric.Group([circle, text],{
+            left: 80, top: 80,
+            cornerStyle: 'circle',
+            transparentCorners: false
+        });
+        grp.dataType = 'numberTag';
+        canvas.add(grp);
+        canvas.setActiveObject(grp);
+        canvas.requestRenderAll();
+    });
+
+    // ===== 文本 =====
+    document.getElementById('addText').addEventListener('click', ()=>{
+        const val = (document.getElementById('textInput').value || '').trim();
+        const color = document.getElementById('textColor').value;
+        const size = Number(document.getElementById('textSize').value) || 32;
+
+        const t = new fabric.IText(val || '双击编辑文本', {
+            left: 120, top: 120,
+            fill: color,
+            fontSize: size,
+            fontFamily: 'Microsoft YaHei, PingFang SC, sans-serif',
+            fontWeight: '600',
+            editable: true
+        });
+        t.dataType = 'text';
+        canvas.add(t);
+        canvas.setActiveObject(t);
+        canvas.requestRenderAll();
+    });
+
+    document.getElementById('applyTextStyle').addEventListener('click', ()=>{
+        const obj = canvas.getActiveObject();
+        if(!obj || obj.type !== 'i-text'){
+            alert('请先选中一个文本再应用样式。');
+            return;
+        }
+        obj.set({
+            fill: document.getElementById('textColor').value,
+            fontSize: Number(document.getElementById('textSize').value) || obj.fontSize
+        });
+        obj.setCoords();
+        canvas.requestRenderAll();
+    });
+
+    canvas.on('selection:created', syncTextPanelFromSelection);
+    canvas.on('selection:updated', syncTextPanelFromSelection);
+    function syncTextPanelFromSelection(){
+        const obj = canvas.getActiveObject();
+        if(obj && obj.type === 'i-text'){
+            document.getElementById('textColor').value = obj.fill || '#ffffff';
+            document.getElementById('textSize').value = obj.fontSize || 32;
+            document.getElementById('textInput').value = obj.text || '';
+        }
+    }
+
+    // ===== 删除选中 =====
+    document.getElementById('deleteSelected').addEventListener('click', deleteSelectedObjects);
+    function deleteSelectedObjects(){
+        const active = canvas.getActiveObjects();
+        if(active && active.length){
+            active.forEach(o => canvas.remove(o));
+            canvas.discardActiveObject();
+            canvas.requestRenderAll();
+        }
+    }
+
+    // ===== 粘贴图片（capture） =====
+    document.addEventListener('paste', async (e)=>{
+        const items = e.clipboardData?.items;
+        if(!items) return;
+
+        const imageItems = [];
+        for(const item of items){
+            if(item.type && item.type.startsWith('image/')) imageItems.push(item);
+        }
+        if(imageItems.length === 0) return;
+
+        e.preventDefault();
+        for(const it of imageItems){
+            const file = it.getAsFile();
+            const url = URL.createObjectURL(file);
+            await addImageFromUrl(url);
+            URL.revokeObjectURL(url);
+        }
+    }, true);
+
+    // ===== 拖拽图片到框格 =====
+    const shell = document.getElementById('shell');
+    ;['dragenter','dragover'].forEach(ev=>{
+        shell.addEventListener(ev, (e)=>{ e.preventDefault(); });
+    });
+    shell.addEventListener('drop', async (e)=>{
+        e.preventDefault();
+        const files = [...(e.dataTransfer?.files || [])];
+        for(const f of files){
+            if(f.type.startsWith('image/')){
+                const url = URL.createObjectURL(f);
+                await addImageFromUrl(url);
+                URL.revokeObjectURL(url);
+            }
+        }
+    });
+
+    async function addImageFromUrl(url){
+        return new Promise((resolve)=>{
+            fabric.Image.fromURL(url, (img)=>{
+                const cw = canvas.getWidth();
+                const maxW = cw * 0.60;
+                const maxH = 700;
+                const scale = Math.min(maxW / img.width, maxH / img.height, 1);
+
+                img.set({
+                    left: 80 + Math.random()*80,
+                    top:  80 + Math.random()*80,
+                    scaleX: scale,
+                    scaleY: scale,
+                    cornerStyle: 'circle',
+                    transparentCorners: false
+                });
+                img.dataType = 'image';
+                canvas.add(img);
+                canvas.setActiveObject(img);
+                canvas.requestRenderAll();
+                resolve();
+            }, { crossOrigin: 'anonymous' });
+        });
+    }
+
+    // ===== 截图保存（导出强制白底） =====
+    document.getElementById('shot').addEventListener('click', ()=>{
+        const prevBg = canvas.backgroundColor;
+        canvas.setBackgroundColor('#ffffff', canvas.renderAll.bind(canvas));
+        const dataURL = canvas.toDataURL({ format:'png', multiplier:2 });
+        canvas.setBackgroundColor(prevBg, canvas.renderAll.bind(canvas));
+        downloadDataUrl(dataURL, `图像修改_白底_${formatTime(new Date())}.png`);
+    });
+
+    function downloadDataUrl(dataUrl, filename){
+        const a = document.createElement('a');
+        a.href = dataUrl;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+    }
+
+    // ===== 撤销 / 重做 / 清空 =====
+    document.getElementById('undo').addEventListener('click', ()=>{
+        if(historyIndex > 0){
+            historyIndex--;
+            restoreFrom(historyIndex);
+        }
+    });
+    document.getElementById('redo').addEventListener('click', ()=>{
+        if(historyIndex < history.length - 1){
+            historyIndex++;
+            restoreFrom(historyIndex);
+        }
+    });
+    document.getElementById('clear').addEventListener('click', ()=>{
+        canvas.getObjects().forEach(o => canvas.remove(o));
+        canvas.discardActiveObject();
+        canvas.requestRenderAll();
+        pushHistorySoon();
+    });
+
+    // ===== 小工具 =====
+    function hexToRgba(hex, alpha){
+        const h = hex.replace('#','').trim();
+        const bigint = parseInt(h.length===3 ? h.split('').map(x=>x+x).join('') : h, 16);
+        const r = (bigint >> 16) & 255;
+        const g = (bigint >> 8) & 255;
+        const b = bigint & 255;
+        return `rgba(${r},${g},${b},${alpha})`;
+    }
+    function formatTime(d){
+        const pad = (n)=> String(n).padStart(2,'0');
+        return `${d.getFullYear()}${pad(d.getMonth()+1)}${pad(d.getDate())}_${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`;
+    }
+
+    // 默认工具：选择
+    setActiveTool('select');
+</script>
+</body>
+</html>

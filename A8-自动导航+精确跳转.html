@@ -1,0 +1,1144 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>多框粘贴展示 + 图片比例切换 + 自动导航 + 截图</title>
+    <style>
+        :root{
+            --border:#a8c5e0;
+            --borderActive:#0969da;
+            --bg:#ffffff;
+            --muted:#4a6fa5;
+            --panelBg:#e8f2fc;
+            --panelBorder:#b6d4f0;
+
+            /* ✅ 图片框默认比例（会被按钮动态修改） */
+            --imgAspect: 1 / 1;
+        }
+
+        body{
+            margin:0;
+            font-family: system-ui, -apple-system, "Segoe UI", Roboto,
+            "PingFang SC","Microsoft YaHei", Arial, sans-serif;
+            background: linear-gradient(160deg, #d4e8f7 0%, #e3f0fa 35%, #ebf5fc 70%, #d4e8f7 100%);
+            background-attachment: fixed;
+            min-height: 100vh;
+            color:#1a365d;
+        }
+
+        /* ✅ 左侧悬浮导航栏（自动生成） */
+        .sideNav{
+            position: fixed;
+            left: 12px;
+            top: 50%;
+            transform: translateY(-50%);
+            z-index: 9999;
+            width: 190px;
+            max-height: 78vh;
+            overflow:auto;
+            display:flex;
+            flex-direction:column;
+            gap:10px;
+            padding: 10px;
+            background: rgba(255,255,255,.82);
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            box-shadow: 0 10px 30px rgba(0,0,0,.08);
+            backdrop-filter: blur(6px);
+        }
+        .sideNav .navTitle{
+            font-weight:900;
+            color:#0b3d6b;
+            font-size:12px;
+            letter-spacing:.3px;
+            user-select:none;
+            padding: 2px 2px 6px;
+            border-bottom: 1px dashed rgba(168,197,224,.8);
+        }
+        .navGroup{
+            display:flex;
+            flex-direction:column;
+            gap:8px;
+        }
+        .navGroupTitle{
+            font-size:12px;
+            color:#0b3d6b;
+            font-weight:800;
+            opacity:.9;
+            padding: 4px 2px 2px;
+            user-select:none;
+        }
+        .sideNav button{
+            border:1px solid var(--border);
+            background:#fff;
+            color:#1a365d;
+            border-radius: 10px;
+            padding: 8px 10px;
+            font-size:12px;
+            cursor:pointer;
+            text-align:left;
+            line-height:1.2;
+            white-space:nowrap;
+            overflow:hidden;
+            text-overflow:ellipsis;
+        }
+        .sideNav button:hover{ background:#e8f2fc; }
+        .sideNav button.active{
+            border-color: var(--borderActive);
+            box-shadow: 0 0 0 3px rgba(9,105,218,.12);
+            color:#0969da;
+            font-weight:800;
+        }
+
+        .wrap{
+            max-width: 1500px;
+            margin: 20px auto;
+            padding: 0 14px;
+            box-sizing:border-box;
+        }
+        /* ✅ 给内容留出一点左侧空间，避免被导航遮挡 */
+        @media (min-width: 900px){
+            .wrap{ padding-left: 210px; }
+        }
+        @media (max-width: 900px){
+            .sideNav{ display:none; }
+            .wrap{ padding-left: 14px; }
+        }
+
+        .hint{
+            color:var(--muted);
+            font-size:14px;
+            line-height:1.6;
+            background:rgba(255,255,255,.85);
+            border:1px solid var(--border);
+            border-radius: 10px;
+            padding: 10px 12px;
+            margin-bottom: 12px;
+            scroll-margin-top: 16px;
+        }
+
+        .panel{
+            background: var(--panelBg);
+            border: 2px solid var(--panelBorder);
+            border-radius: 16px;
+            padding: 14px;
+            margin-bottom: 14px;
+            scroll-margin-top: 16px;
+        }
+        .panelTitleRow{
+            display:flex;
+            align-items:center;
+            justify-content:space-between;
+            gap:10px;
+            margin: 2px 4px 12px;
+        }
+        .panelTitle{
+            font-size: 22px;
+            font-weight: 900;
+            color:#0b3d6b;
+            letter-spacing:.5px;
+            margin:0;
+        }
+
+        .grid{
+            display:grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 12px;
+            width:100%;
+        }
+
+        .cell{
+            background:var(--bg);
+            border:2px solid var(--border);
+            border-radius: 14px;
+            padding: 12px;
+            box-sizing:border-box;
+            cursor:pointer;
+            display:flex;
+            flex-direction:column;
+            min-width:0;
+            aspect-ratio: 27 / 32;
+            transition: .15s;
+            outline:none;
+            scroll-margin-top: 16px; /* ✅ 精确跳转更舒服 */
+        }
+        .cell.active{
+            border-color: var(--borderActive);
+            box-shadow: 0 0 0 4px rgba(9,105,218,.15);
+        }
+        .cell.big{
+            grid-column: 1 / -1;
+            aspect-ratio: 81 / 32;
+        }
+
+        .cellHeader{
+            display:grid;
+            grid-template-columns: 1fr auto 1fr;
+            align-items:center;
+            gap:10px;
+            margin-bottom:10px;
+            min-width:0;
+        }
+
+        .label{
+            font-weight:800;
+            font-size:14px;
+            color:#1a365d;
+            white-space:nowrap;
+            overflow:hidden;
+            text-overflow:ellipsis;
+            min-width:0;
+        }
+        .badge{
+            font-size:12px;
+            color:var(--muted);
+            font-weight:500;
+        }
+
+        .counter{
+            justify-self:center;
+            font-size:12px;
+            color:#0b3d6b;
+            background: rgba(9,105,218,.08);
+            border: 1px solid rgba(9,105,218,.2);
+            padding: 4px 10px;
+            border-radius: 999px;
+            user-select:none;
+            white-space:nowrap;
+        }
+
+        .actions{
+            justify-self:end;
+            display:flex;
+            gap:6px;
+            align-items:center;
+            flex-wrap:wrap;
+        }
+
+        .btn{
+            border:1px solid var(--border);
+            background:#fff;
+            color:#1a365d;
+            border-radius: 10px;
+            padding: 6px 10px;
+            font-size:12px;
+            cursor:pointer;
+            white-space:nowrap;
+        }
+        .btn:hover{ background:#e8f2fc; }
+        .btn.primary{
+            border-color:#0969da;
+            color:#0969da;
+            font-weight:800;
+        }
+
+        .content{
+            flex:1;
+            border:1px dashed #a8c5e0;
+            border-radius:12px;
+            padding:12px;
+            overflow:auto;
+            min-width:0;
+            min-height:0;
+            background:#fff;
+            color:#1a365d;
+            position:relative;
+        }
+
+        .img{
+            max-width:none;
+            height:auto;
+            border-radius:10px;
+            display:block;
+        }
+        .text{
+            white-space:pre;
+            line-height:1.6;
+            font-size:14px;
+            width:max-content;
+            max-width:none;
+        }
+
+        .content.noPad{ padding:0; border-radius:12px; }
+        .textarea{
+            width:100%;
+            height:100%;
+            min-height:100%;
+            border:0;
+            border-radius:12px;
+            padding:12px;
+            font-size:14px;
+            line-height:1.6;
+            outline:none;
+            resize:none;
+            box-sizing:border-box;
+            white-space:pre-wrap;
+            overflow:auto;
+            background:#fff;
+            color:#1a365d;
+        }
+
+        /* ===== 图片区域 ===== */
+        .imgRowTitle{
+            font-size: 22px;
+            font-weight: 900;
+            color:#0b3d6b;
+            margin: 0;
+            letter-spacing:.5px;
+        }
+        .imgRowHeader{
+            display:flex;
+            align-items:center;
+            justify-content:space-between;
+            gap:10px;
+            margin: 2px 4px 10px;
+            flex-wrap: wrap;
+        }
+
+        .imgControls{
+            display:flex;
+            gap:8px;
+            align-items:center;
+            flex-wrap:wrap;
+            justify-content:flex-end;
+        }
+        .imgControls .hintSmall{
+            color:var(--muted);
+            font-size:12px;
+            margin-right:6px;
+            user-select:none;
+            white-space:nowrap;
+        }
+
+        /* ✅ 比例按钮条 */
+        .ratioBar{
+            width:100%;
+            display:flex;
+            gap:8px;
+            flex-wrap:wrap;
+            padding: 6px 4px 12px;
+        }
+        .ratioBtn{
+            border:1px solid var(--border);
+            background:#fff;
+            color:#1a365d;
+            border-radius: 999px;
+            padding: 6px 10px;
+            font-size:12px;
+            cursor:pointer;
+            white-space:nowrap;
+            user-select:none;
+        }
+        .ratioBtn:hover{ background:#e8f2fc; }
+        .ratioBtn.active{
+            border-color:#0969da;
+            color:#0969da;
+            box-shadow: 0 0 0 3px rgba(9,105,218,.12);
+            font-weight:900;
+        }
+
+        .imgGrid{
+            display:grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 0;
+            width:100%;
+        }
+        .imgCell{
+            background:#fff;
+            border:2px solid var(--border);
+            box-sizing:border-box;
+            aspect-ratio: var(--imgAspect);
+            position:relative;
+            overflow:hidden;
+            cursor:pointer;
+            user-select:none;
+            scroll-margin-top: 16px; /* ✅ 精确跳转 */
+        }
+        .imgCell + .imgCell{ border-left:0; }
+
+        .imgCell.active{
+            border-color: var(--borderActive);
+            box-shadow: inset 0 0 0 2px rgba(9,105,218,.15);
+        }
+
+        .imgTip{
+            position:absolute;
+            left:50%;
+            top:50%;
+            transform:translate(-50%,-50%);
+            color:var(--muted);
+            font-size:14px;
+            text-align:center;
+            padding:0 10px;
+            pointer-events:none;
+            z-index:1;
+        }
+
+        .imgStage{
+            position:absolute;
+            inset:0;
+            z-index:2;
+        }
+        .imgStage img{
+            position:absolute;
+            left:50%;
+            top:50%;
+            transform: translate(-50%, -50%) scale(1);
+            transform-origin:center center;
+            will-change: transform;
+            user-select:none;
+            -webkit-user-drag:none;
+            max-width:none;
+            max-height:none;
+            pointer-events:none;
+        }
+
+        @media (max-width:1100px){
+            .grid{ grid-template-columns: 1fr; }
+            .cell{ aspect-ratio:auto; min-height:347px; }
+            .cell.big{ aspect-ratio:auto; }
+
+            .imgGrid{ grid-template-columns: 1fr; }
+            .imgCell + .imgCell{ border-left:2px solid var(--border); border-top:0; }
+        }
+    </style>
+</head>
+
+<body>
+
+<!-- ✅ 左侧悬浮导航（按钮自动生成） -->
+<div class="sideNav" id="sideNav">
+    <div class="navTitle">页面导航（自动）</div>
+    <div id="navContainer"></div>
+</div>
+
+<div class="wrap">
+    <!-- 顶部说明 -->
+    <div class="hint" id="secTop" data-nav-group="基础" data-nav-title="顶部说明">
+        ✅ 复制图片框格支持比例切换：1:1, 2:2, 3:4, 4:3, 16:9, 9:16, 16:6, 16:3（点按钮立即改变下方框格尺寸）。<br/>
+        ✅ 左侧悬浮导航栏：自动生成按钮，可精确跳到每一个框格。<br/>
+        ✅ 图片框：先点框格选中，再 Ctrl+V 粘贴；滚轮缩放、按住拖动；截图导出两个框格拼图。
+    </div>
+
+    <!-- 图像文本 -->
+    <div class="panel" id="secTextPanel" data-nav-group="图像文本" data-nav-title="图像文本区">
+        <div class="panelTitleRow">
+            <h2 class="panelTitle">图像文本</h2>
+        </div>
+
+        <div class="grid">
+            <!-- 大框格1 -->
+            <div class="cell big" tabindex="0" data-mode="textarea" data-nav-group="图像文本">
+                <div class="cellHeader">
+                    <div class="label">文本编辑展示 1 <span class="badge">可编辑文本框</span></div>
+                    <div class="counter" data-role="counter">字数：0</div>
+                    <div class="actions">
+                        <button class="btn" data-action="copy">复制</button>
+                        <button class="btn" data-action="clear">清空</button>
+                    </div>
+                </div>
+                <div class="content noPad">
+                    <textarea class="textarea" placeholder="把文案粘贴到这里（大框格 1）…"></textarea>
+                </div>
+            </div>
+
+            <!-- 大框格2 -->
+            <div class="cell big" tabindex="0" data-mode="textarea" data-nav-group="图像文本">
+                <div class="cellHeader">
+                    <div class="label">文本编辑展示 2 <span class="badge">可编辑文本框</span></div>
+                    <div class="counter" data-role="counter">字数：0</div>
+                    <div class="actions">
+                        <button class="btn" data-action="copy">复制</button>
+                        <button class="btn" data-action="clear">清空</button>
+                    </div>
+                </div>
+                <div class="content noPad">
+                    <textarea class="textarea" placeholder="把文案粘贴到这里（大框格 2）…"></textarea>
+                </div>
+            </div>
+
+            <!-- 大框格3 -->
+            <div class="cell big" tabindex="0" data-mode="textarea" data-nav-group="图像文本">
+                <div class="cellHeader">
+                    <div class="label">文本编辑展示 3 <span class="badge">可编辑文本框</span></div>
+                    <div class="counter" data-role="counter">字数：0</div>
+                    <div class="actions">
+                        <button class="btn" data-action="copy">复制</button>
+                        <button class="btn" data-action="clear">清空</button>
+                    </div>
+                </div>
+                <div class="content noPad">
+                    <textarea class="textarea" placeholder="把文案粘贴到这里（大框格 3）…"></textarea>
+                </div>
+            </div>
+
+            <!-- 框格1 -->
+            <div class="cell active" tabindex="0" data-mode="normal" data-nav-group="图像文本">
+                <div class="cellHeader">
+                    <div class="label">框格 1 <span class="badge">粘贴图片/文本</span></div>
+                    <div class="counter" data-role="counter">字数：0</div>
+                    <div class="actions">
+                        <button class="btn" data-action="copy">复制</button>
+                        <button class="btn" data-action="clear">清空</button>
+                    </div>
+                </div>
+                <div class="content">Ctrl+V 粘贴</div>
+            </div>
+
+            <!-- 文本展示 -->
+            <div class="cell" tabindex="0" data-mode="textarea" data-nav-group="图像文本">
+                <div class="cellHeader">
+                    <div class="label">文本展示 <span class="badge">可编辑文本框</span></div>
+                    <div class="counter" data-role="counter">字数：0</div>
+                    <div class="actions">
+                        <button class="btn" data-action="copy">复制</button>
+                        <button class="btn" data-action="clear">清空</button>
+                    </div>
+                </div>
+                <div class="content noPad">
+                    <textarea class="textarea" placeholder="把文案粘贴到这里，然后直接修改…"></textarea>
+                </div>
+            </div>
+
+            <!-- 34功能集合 -->
+            <div class="cell" tabindex="0" data-mode="cleanAndStrip" data-nav-group="图像文本">
+                <div class="cellHeader">
+                    <div class="label">34功能集合 <span class="badge">清洗+去符号</span></div>
+                    <div class="counter" data-role="counter">字数：0</div>
+                    <div class="actions">
+                        <button class="btn primary" data-action="apply">应用规则</button>
+                        <button class="btn" data-action="copy">复制</button>
+                        <button class="btn" data-action="clear">清空</button>
+                    </div>
+                </div>
+                <div class="content">Ctrl+V 粘贴文本（先清洗再去符号）</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 复制图片框格 -->
+    <div class="panel" id="secImagePanel" data-nav-group="复制图片框格" data-nav-title="复制图片框格区">
+        <div class="imgRowHeader">
+            <h2 class="imgRowTitle">复制图片框格</h2>
+
+            <div class="imgControls">
+                <span class="hintSmall">操作当前选中框（左/右）：</span>
+                <button class="btn" id="imgZoomOut">缩小</button>
+                <button class="btn" id="imgZoomIn">放大</button>
+                <button class="btn" id="imgReset">重置</button>
+                <button class="btn primary" id="imgShot">截图</button>
+            </div>
+        </div>
+
+        <div class="ratioBar" id="ratioBar">
+            <button class="ratioBtn active" data-ratio="1/1">1:1</button>
+            <button class="ratioBtn" data-ratio="2/2">2:2</button>
+            <button class="ratioBtn" data-ratio="3/4">3:4</button>
+            <button class="ratioBtn" data-ratio="4/3">4:3</button>
+            <button class="ratioBtn" data-ratio="16:9">16:9</button>
+            <button class="ratioBtn" data-ratio="9/16">9:16</button>
+            <button class="ratioBtn" data-ratio="16/6">16:6</button>
+            <button class="ratioBtn" data-ratio="16/3">16:3</button>
+        </div>
+
+        <div class="imgGrid" id="imgCaptureArea">
+            <div class="imgCell" tabindex="0" data-imgcell="1" data-nav-group="复制图片框格" data-nav-title="图片框 左">
+                <div class="imgTip">点击选中后 Ctrl+V 粘贴图片<br/>滚轮缩放，按住拖动</div>
+                <div class="imgStage"><img style="display:none;" alt="pasted"/></div>
+            </div>
+
+            <div class="imgCell" tabindex="0" data-imgcell="2" data-nav-group="复制图片框格" data-nav-title="图片框 右">
+                <div class="imgTip">点击选中后 Ctrl+V 粘贴图片<br/>滚轮缩放，按住拖动</div>
+                <div class="imgStage"><img style="display:none;" alt="pasted"/></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // ======================
+    // ✅ 自动导航：扫描并生成按钮
+    // ======================
+    function slugify(str){
+        return (str || "")
+            .toString()
+            .trim()
+            .replace(/\s+/g, '-')
+            .replace(/[^\u4e00-\u9fa5a-zA-Z0-9\-_]/g, '')
+            .toLowerCase();
+    }
+
+    function ensureId(el, prefix, name){
+        if(el.id) return el.id;
+        const base = slugify(name) || prefix;
+        let id = `${prefix}-${base}`;
+        let i = 1;
+        while(document.getElementById(id)){
+            i++;
+            id = `${prefix}-${base}-${i}`;
+        }
+        el.id = id;
+        return id;
+    }
+
+    function getCellTitle(cell){
+        const label = cell.querySelector('.label');
+        if(!label) return '未命名框格';
+        // 只取纯文本（去掉 badge）
+        return label.childNodes[0]?.textContent?.trim() || label.textContent.trim();
+    }
+
+    function buildAutoNav(){
+        const navContainer = document.getElementById('navContainer');
+        const sideNav = document.getElementById('sideNav');
+        navContainer.innerHTML = "";
+
+        // 采集所有“可导航目标”
+        // 1) hint / panel（有 data-nav-title 的）
+        const blocks = Array.from(document.querySelectorAll('[data-nav-title]'));
+
+        // 2) 每一个 .cell（精确到框格）
+        const cells = Array.from(document.querySelectorAll('.cell')).map(cell=>{
+            // cell 的标题来自 .label
+            const title = getCellTitle(cell);
+            cell.dataset.navTitle = title;
+            if(!cell.dataset.navGroup) cell.dataset.navGroup = "图像文本";
+            blocks.push(cell);
+            return cell;
+        });
+
+        // 3) 图片框 .imgCell（精确到左/右）
+        const imgCells = Array.from(document.querySelectorAll('.imgCell'));
+        imgCells.forEach(ic=>{
+            if(!ic.dataset.navTitle){
+                ic.dataset.navTitle = ic.dataset.imgcell === "1" ? "图片框 左" : "图片框 右";
+            }
+            if(!ic.dataset.navGroup) ic.dataset.navGroup = "复制图片框格";
+            blocks.push(ic);
+        });
+
+        // 去重（同一个元素可能重复入列）
+        const uniq = [];
+        const set = new Set();
+        blocks.forEach(el=>{
+            if(set.has(el)) return;
+            set.add(el);
+            uniq.push(el);
+        });
+
+        // 生成分组
+        const groupMap = new Map();
+        uniq.forEach(el=>{
+            const group = el.dataset.navGroup || "其他";
+            const title = el.dataset.navTitle || el.id || "未命名";
+            const id = ensureId(el, 'nav', `${group}-${title}`);
+            if(!groupMap.has(group)) groupMap.set(group, []);
+            groupMap.get(group).push({id, title, el});
+        });
+
+        // 渲染到侧边栏
+        groupMap.forEach((items, groupName)=>{
+            const groupEl = document.createElement('div');
+            groupEl.className = 'navGroup';
+
+            const gt = document.createElement('div');
+            gt.className = 'navGroupTitle';
+            gt.textContent = groupName;
+            groupEl.appendChild(gt);
+
+            // 同组内：按 DOM 顺序排列（items 已按扫描顺序）
+            items.forEach(it=>{
+                const b = document.createElement('button');
+                b.textContent = it.title;
+                b.dataset.target = `#${it.id}`;
+                groupEl.appendChild(b);
+            });
+
+            navContainer.appendChild(groupEl);
+        });
+
+        // 点击跳转
+        sideNav.addEventListener('click', (e)=>{
+            const btn = e.target.closest('button[data-target]');
+            if(!btn) return;
+            const el = document.querySelector(btn.dataset.target);
+            if(el){
+                el.scrollIntoView({behavior:'smooth', block:'start'});
+            }
+        });
+
+        // 滚动高亮（IntersectionObserver）
+        const allBtns = Array.from(sideNav.querySelectorAll('button[data-target]'));
+        const targetEls = allBtns
+            .map(b => document.querySelector(b.dataset.target))
+            .filter(Boolean);
+
+        const btnById = new Map();
+        allBtns.forEach(b=>{
+            const id = b.dataset.target.slice(1);
+            btnById.set(id, b);
+        });
+
+        let currentActiveId = null;
+
+        const io = new IntersectionObserver((entries)=>{
+            // 找最“靠上且可见”的一个
+            const visible = entries
+                .filter(en=>en.isIntersecting)
+                .sort((a,b)=>a.boundingClientRect.top - b.boundingClientRect.top);
+
+            if(visible.length){
+                const id = visible[0].target.id;
+                if(id && id !== currentActiveId){
+                    currentActiveId = id;
+                    allBtns.forEach(b=>b.classList.remove('active'));
+                    const activeBtn = btnById.get(id);
+                    if(activeBtn){
+                        activeBtn.classList.add('active');
+                        // 确保高亮项在可视区域
+                        activeBtn.scrollIntoView({block:'nearest'});
+                    }
+                }
+            }
+        }, {
+            root: null,
+            threshold: 0.25
+        });
+
+        targetEls.forEach(el=>io.observe(el));
+    }
+
+    // 页面加载后生成导航
+    window.addEventListener('DOMContentLoaded', buildAutoNav);
+
+    // ======================
+    // ✅ 图片比例切换
+    // ======================
+    const ratioBar = document.getElementById('ratioBar');
+    ratioBar.addEventListener('click', (e)=>{
+        const btn = e.target.closest('.ratioBtn');
+        if(!btn) return;
+        const ratio = btn.dataset.ratio; // "9/16" 等
+        document.documentElement.style.setProperty('--imgAspect', ratio);
+        ratioBar.querySelectorAll('.ratioBtn').forEach(b=>b.classList.remove('active'));
+        btn.classList.add('active');
+    });
+
+
+    // ======================
+    // 图像文本：框格（粘贴/复制/清空/计数）
+    // ======================
+    const cells = Array.from(document.querySelectorAll('.cell'));
+    let activeCell = cells.find(c=>c.classList.contains('active')) || cells[0];
+
+    function setActiveCell(cell, {focusCell=true} = {}){
+        cells.forEach(c=>c.classList.remove('active'));
+        cell.classList.add('active');
+        activeCell = cell;
+        if(focusCell) cell.focus();
+    }
+
+    function getTextFromCell(cell){
+        if(cell.dataset.mode === "textarea"){
+            const ta = cell.querySelector('textarea.textarea');
+            return ta ? ta.value : "";
+        }
+        const textEl = cell.querySelector('.text');
+        return textEl ? textEl.textContent : "";
+    }
+
+    function updateCounter(cell){
+        const counter = cell.querySelector('[data-role="counter"]');
+        if(!counter) return;
+        const txt = getTextFromCell(cell);
+        counter.textContent = `字数：${txt.length}`;
+    }
+
+    function cleanText(text){
+        return (text || "")
+            .replace(/\r\n/g,"\n").replace(/\r/g,"\n")
+            .split("\n")
+            .map(l => l.replace(/^[\s\u00A0]+|[\s\u00A0]+$/g, ""))
+            .filter(l => l !== "")
+            .join("\n");
+    }
+    function stripSymbols(text){
+        return (text || "")
+            .replace(/\r\n/g,"\n").replace(/\r/g,"\n")
+            .replace(/[＃#＊*]/g, "")
+            .replace(/[ \t\u3000]/g, "");
+    }
+    function applyModeTransform(mode, text){
+        if(mode === "clean") return cleanText(text);
+        if(mode === "strip") return stripSymbols(text);
+        if(mode === "cleanAndStrip") return stripSymbols(cleanText(text));
+        return text || "";
+    }
+
+    function setContent(cell, {text=null, imgUrl=null}){
+        if(cell.dataset.mode === "textarea"){
+            const ta = cell.querySelector('textarea.textarea');
+            if(ta && text != null) ta.value = text;
+            updateCounter(cell);
+            return;
+        }
+
+        const content = cell.querySelector('.content');
+        content.innerHTML = "";
+        content.style.padding = "12px";
+
+        if(imgUrl){
+            const img = document.createElement('img');
+            img.src = imgUrl;
+            img.className = "img";
+            img.alt = "pasted image";
+            content.appendChild(img);
+        }
+        if(text && text.trim() !== ""){
+            const div = document.createElement('div');
+            div.className = "text";
+            div.textContent = text;
+            content.appendChild(div);
+        }
+        updateCounter(cell);
+    }
+
+    function clearCell(cell){
+        if(cell.dataset.mode === "textarea"){
+            const ta = cell.querySelector('textarea.textarea');
+            if(ta) ta.value = "";
+            updateCounter(cell);
+            ta && ta.focus();
+            return;
+        }
+
+        const content = cell.querySelector('.content');
+        const mode = cell.dataset.mode;
+        content.textContent =
+            mode==="clean" ? "Ctrl+V 粘贴文本（自动清洗）" :
+                mode==="strip" ? "Ctrl+V 粘贴文本（自动去 # 空格 *）" :
+                    mode==="cleanAndStrip" ? "Ctrl+V 粘贴文本（先清洗再去符号）" :
+                        "Ctrl+V 粘贴";
+        updateCounter(cell);
+    }
+
+    async function copyTextWithFallback(text, fallbackEl){
+        try{
+            if(navigator.clipboard && window.isSecureContext){
+                await navigator.clipboard.writeText(text);
+                return true;
+            }
+        }catch(e){}
+
+        if(fallbackEl){
+            fallbackEl.focus();
+            if(fallbackEl.select) fallbackEl.select();
+            if(fallbackEl.setSelectionRange) fallbackEl.setSelectionRange(0, fallbackEl.value.length);
+            return document.execCommand('copy');
+        }
+        return false;
+    }
+
+    async function copyCell(cell, btn){
+        const mode = cell.dataset.mode;
+        const text = getTextFromCell(cell);
+
+        if(!text){
+            const old = btn.textContent;
+            btn.textContent = "无文本可复制";
+            setTimeout(()=>btn.textContent=old, 1200);
+            return;
+        }
+
+        let ok = false;
+        if(mode === "textarea"){
+            const ta = cell.querySelector('textarea.textarea');
+            ok = await copyTextWithFallback(text, ta);
+        }else{
+            const tmp = document.createElement('textarea');
+            tmp.value = text;
+            tmp.style.position = "fixed";
+            tmp.style.left = "-9999px";
+            document.body.appendChild(tmp);
+            ok = await copyTextWithFallback(text, tmp);
+            document.body.removeChild(tmp);
+        }
+
+        const old = btn.textContent;
+        btn.textContent = ok ? "已复制" : "复制失败";
+        setTimeout(()=>btn.textContent=old, 1200);
+    }
+
+    function applyRule(cell){
+        const mode = cell.dataset.mode;
+        if(!(mode==="clean" || mode==="strip" || mode==="cleanAndStrip")) return;
+        const now = getTextFromCell(cell);
+        const out = applyModeTransform(mode, now);
+        setContent(cell, {text: out, imgUrl: null});
+    }
+
+    document.addEventListener('mousedown', (e)=>{
+        const ta = e.target.closest('textarea.textarea');
+        if(ta){
+            const cell = ta.closest('.cell');
+            if(cell){
+                setActiveCell(cell, {focusCell:false});
+                setTimeout(()=>ta.focus(), 0);
+            }
+            return;
+        }
+        const cell = e.target.closest('.cell');
+        if(cell) setActiveCell(cell, {focusCell:true});
+    });
+
+    document.addEventListener('click', (e)=>{
+        const btn = e.target.closest('button[data-action]');
+        if(!btn) return;
+        const cell = btn.closest('.cell');
+        if(!cell) return;
+
+        const action = btn.dataset.action;
+        if(action==="clear") clearCell(cell);
+        if(action==="copy")  copyCell(cell, btn);
+        if(action==="apply") applyRule(cell);
+    });
+
+    document.querySelectorAll('textarea.textarea').forEach(ta=>{
+        ta.addEventListener('input', ()=> updateCounter(ta.closest('.cell')));
+        ta.addEventListener('focus', ()=> setActiveCell(ta.closest('.cell'), {focusCell:false}));
+    });
+
+    document.addEventListener('paste', (e)=>{
+        if(!activeCell) return;
+        if(activeCell.dataset.mode === "textarea") return;
+
+        const mode = activeCell.dataset.mode;
+        const items = e.clipboardData?.items || [];
+
+        if(mode==="clean" || mode==="strip" || mode==="cleanAndStrip"){
+            const text = e.clipboardData.getData("text/plain") || "";
+            if(text.trim()){
+                const out = applyModeTransform(mode, text);
+                setContent(activeCell, {text: out, imgUrl: null});
+                e.preventDefault();
+            }
+            return;
+        }
+
+        for(const item of items){
+            if(item.type && item.type.startsWith("image/")){
+                const file = item.getAsFile();
+                if(file){
+                    setContent(activeCell, {text: null, imgUrl: URL.createObjectURL(file)});
+                    e.preventDefault();
+                    return;
+                }
+            }
+        }
+
+        const text = e.clipboardData.getData("text/plain") || "";
+        if(text.trim()){
+            setContent(activeCell, {text, imgUrl: null});
+            e.preventDefault();
+        }
+    });
+
+    cells.forEach(updateCounter);
+
+    // ======================
+    // 图片：拖动/缩放/截图
+    // ======================
+    const imgCells = Array.from(document.querySelectorAll('.imgCell'));
+    let activeImgCell = imgCells[0];
+    const imgState = new Map();
+    const clamp = (n,a,b)=> Math.max(a, Math.min(b,n));
+
+    function setActiveImgCell(cell){
+        imgCells.forEach(c=>c.classList.remove('active'));
+        cell.classList.add('active');
+        activeImgCell = cell;
+        cell.focus();
+    }
+    function updateImgTransform(cell){
+        const img = cell.querySelector('.imgStage img');
+        const st = imgState.get(cell);
+        img.style.transform = `translate(${st.x}px, ${st.y}px) translate(-50%, -50%) scale(${st.scale})`;
+    }
+    function resetImg(cell){
+        const st = imgState.get(cell);
+        st.scale = 1; st.x = 0; st.y = 0;
+        updateImgTransform(cell);
+    }
+    function zoom(cell, factor){
+        const img = cell.querySelector('.imgStage img');
+        if(img.style.display === "none") return;
+        const st = imgState.get(cell);
+        st.scale = clamp(st.scale * factor, 0.2, 6);
+        updateImgTransform(cell);
+    }
+    function initImgCell(cell){
+        imgState.set(cell, {scale:1,x:0,y:0,dragging:false,startX:0,startY:0,baseX:0,baseY:0});
+        updateImgTransform(cell);
+
+        cell.addEventListener('mousedown', (ev)=>{
+            setActiveImgCell(cell);
+            const img = cell.querySelector('.imgStage img');
+            if(img.style.display === "none") return;
+
+            const st = imgState.get(cell);
+            st.dragging = true;
+            st.startX = ev.clientX;
+            st.startY = ev.clientY;
+            st.baseX = st.x;
+            st.baseY = st.y;
+            ev.preventDefault();
+        });
+
+        cell.addEventListener('wheel', (ev)=>{
+            setActiveImgCell(cell);
+            const img = cell.querySelector('.imgStage img');
+            if(img.style.display === "none") return;
+
+            const st = imgState.get(cell);
+            const factor = ev.deltaY > 0 ? 0.9 : 1.1;
+            st.scale = clamp(st.scale * factor, 0.2, 6);
+            updateImgTransform(cell);
+            ev.preventDefault();
+        }, {passive:false});
+
+        cell.addEventListener('click', ()=> setActiveImgCell(cell));
+    }
+
+    document.addEventListener('mousemove', (ev)=>{
+        imgCells.forEach(cell=>{
+            const st = imgState.get(cell);
+            if(!st || !st.dragging) return;
+            st.x = st.baseX + (ev.clientX - st.startX);
+            st.y = st.baseY + (ev.clientY - st.startY);
+            updateImgTransform(cell);
+        });
+    });
+    document.addEventListener('mouseup', ()=>{
+        imgCells.forEach(cell=>{
+            const st = imgState.get(cell);
+            if(st) st.dragging = false;
+        });
+    });
+
+    imgCells.forEach(initImgCell);
+    setActiveImgCell(imgCells[0]);
+
+    document.addEventListener('paste', (e)=>{
+        if(document.activeElement && document.activeElement.tagName === 'TEXTAREA') return;
+
+        const items = e.clipboardData?.items || [];
+        for(const item of items){
+            if(item.type && item.type.startsWith("image/")){
+                const file = item.getAsFile();
+                if(!file) continue;
+
+                const img = activeImgCell.querySelector('.imgStage img');
+                img.src = URL.createObjectURL(file);
+                img.style.display = "";
+                const tip = activeImgCell.querySelector('.imgTip');
+                if(tip) tip.style.display = "none";
+
+                resetImg(activeImgCell);
+                e.preventDefault();
+                return;
+            }
+        }
+    });
+
+    document.getElementById('imgZoomOut').addEventListener('click', ()=> zoom(activeImgCell, 1/1.15));
+    document.getElementById('imgZoomIn').addEventListener('click', ()=> zoom(activeImgCell, 1.15));
+    document.getElementById('imgReset').addEventListener('click', ()=> resetImg(activeImgCell));
+
+    document.getElementById('imgShot').addEventListener('click', async ()=>{
+        const leftCell = imgCells[0];
+        const rightCell = imgCells[1];
+
+        const r1 = leftCell.getBoundingClientRect();
+        const r2 = rightCell.getBoundingClientRect();
+
+        const dpr = Math.max(1, window.devicePixelRatio || 1);
+        const width = Math.round((r1.width + r2.width) * dpr);
+        const height = Math.round(Math.max(r1.height, r2.height) * dpr);
+
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0,0,width,height);
+
+        await drawImgCell(ctx, leftCell, 0, 0, dpr);
+        await drawImgCell(ctx, rightCell, r1.width, 0, dpr);
+
+        const a = document.createElement('a');
+        a.download = `复制图片框格截图_${Date.now()}.png`;
+        a.href = canvas.toDataURL('image/png');
+        a.click();
+    });
+
+    function loadImage(src){
+        return new Promise((resolve, reject)=>{
+            const im = new Image();
+            im.onload = ()=> resolve(im);
+            im.onerror = reject;
+            im.src = src;
+        });
+    }
+
+    async function drawImgCell(ctx, cell, offsetXcss, offsetYcss, dpr){
+        const rect = cell.getBoundingClientRect();
+        const w = rect.width;
+        const h = rect.height;
+
+        ctx.save();
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(offsetXcss * dpr, offsetYcss * dpr, w * dpr, h * dpr);
+
+        ctx.beginPath();
+        ctx.rect(offsetXcss * dpr, offsetYcss * dpr, w * dpr, h * dpr);
+        ctx.clip();
+
+        const imgEl = cell.querySelector('.imgStage img');
+        if(!imgEl || imgEl.style.display === "none" || !imgEl.src){
+            ctx.restore();
+            ctx.save();
+            ctx.strokeStyle = '#d0d7de';
+            ctx.lineWidth = 2 * dpr;
+            ctx.strokeRect(offsetXcss * dpr + 1, offsetYcss * dpr + 1, w * dpr - 2, h * dpr - 2);
+            ctx.restore();
+            return;
+        }
+
+        const st = imgState.get(cell);
+        const im = await loadImage(imgEl.src);
+
+        const cx = offsetXcss + w/2 + st.x;
+        const cy = offsetYcss + h/2 + st.y;
+
+        const dw = im.naturalWidth * st.scale;
+        const dh = im.naturalHeight * st.scale;
+
+        const dx = (cx - dw/2) * dpr;
+        const dy = (cy - dh/2) * dpr;
+
+        ctx.drawImage(im, dx, dy, dw * dpr, dh * dpr);
+
+        ctx.restore();
+
+        ctx.save();
+        ctx.strokeStyle = '#d0d7de';
+        ctx.lineWidth = 2 * dpr;
+        ctx.strokeRect(offsetXcss * dpr + 1, offsetYcss * dpr + 1, w * dpr - 2, h * dpr - 2);
+        ctx.restore();
+    }
+</script>
+
+</body>
+</html>

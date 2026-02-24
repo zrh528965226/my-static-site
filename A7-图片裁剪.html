@@ -1,0 +1,850 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>多图层图片框：粘贴/上传多图 + 图层 + 透明度 + 截图</title>
+    <style>
+        :root{
+            --bg1:#0b1220; --bg2:#12263b;
+            --card: rgba(255,255,255,.08);
+            --border: rgba(255,255,255,.14);
+            --text: rgba(255,255,255,.92);
+            --muted: rgba(255,255,255,.65);
+            --shadow: 0 18px 50px rgba(0,0,0,.35);
+            --shadow2: 0 10px 24px rgba(0,0,0,.25);
+            --accent: rgba(56,189,248,.55);
+            --good: rgba(74,222,128,.55);
+            --danger: rgba(255, 99, 99, .38);
+        }
+        *{ box-sizing:border-box; }
+        body{
+            margin:0; min-height:100vh; color:var(--text);
+            font-family: system-ui, -apple-system, "PingFang SC","Microsoft YaHei", Arial, sans-serif;
+            background:
+                    radial-gradient(1000px 600px at 10% 10%, rgba(56,189,248,.18), transparent 55%),
+                    radial-gradient(900px 600px at 90% 15%, rgba(167,139,250,.16), transparent 55%),
+                    linear-gradient(135deg, var(--bg1), var(--bg2));
+        }
+        .wrap{ max-width: 1200px; margin: 0 auto; padding: 20px 16px 40px; }
+        h1{ margin:0; font-size: 20px; font-weight: 850; }
+        .sub{ margin-top:8px; color:var(--muted); font-size:13px; line-height:1.6; }
+
+        .card{
+            margin-top: 14px;
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            box-shadow: var(--shadow);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            overflow:hidden;
+        }
+
+        .toolbar{
+            display:flex; flex-wrap: wrap; gap:10px; align-items:center;
+            padding: 12px 14px;
+            border-bottom: 1px solid rgba(255,255,255,.10);
+        }
+
+        .btn{
+            border: 1px solid rgba(255,255,255,.16);
+            background: rgba(255,255,255,.08);
+            color: var(--text);
+            padding: 9px 12px;
+            border-radius: 12px;
+            cursor:pointer;
+            font-weight: 650;
+            transition: transform .12s ease, background .12s ease, border-color .12s ease, opacity .12s ease;
+            user-select:none;
+            white-space: nowrap;
+        }
+        .btn:hover{ transform: translateY(-1px); background: rgba(255,255,255,.11); border-color: rgba(255,255,255,.26); }
+        .btn:active{ transform: translateY(0px); opacity:.95; }
+        .btn:disabled{ cursor:not-allowed; opacity:.45; transform:none; }
+        .btn.primary{ border-color: rgba(56,189,248,.35); background: rgba(56,189,248,.10); }
+        .btn.good{ border-color: rgba(74,222,128,.30); background: rgba(74,222,128,.10); }
+        .btn.danger{ border-color: rgba(255,99,99,.30); background: rgba(255,99,99,.10); }
+
+        .pill{
+            padding: 6px 10px;
+            border-radius: 999px;
+            border:1px solid rgba(255,255,255,.14);
+            background: rgba(255,255,255,.06);
+            color: rgba(255,255,255,.78);
+            font-size: 12px;
+            white-space: nowrap;
+        }
+        .meta{ margin-left:auto; display:flex; gap:10px; flex-wrap:wrap; align-items:center; color:var(--muted); font-size:12px; }
+
+        .content{
+            padding: 14px;
+            display:grid;
+            grid-template-columns: 1fr 340px;
+            gap: 14px;
+        }
+        @media (max-width: 980px){
+            .content{ grid-template-columns: 1fr; }
+        }
+
+        .panel{
+            border: 1px solid rgba(255,255,255,.12);
+            border-radius: 16px;
+            background: rgba(0,0,0,.14);
+            overflow:hidden;
+        }
+        .panelHd{
+            display:flex; justify-content:space-between; align-items:center; gap:10px;
+            padding: 10px 12px;
+            background: rgba(255,255,255,.06);
+            border-bottom: 1px solid rgba(255,255,255,.10);
+            font-size: 12px;
+            color: rgba(255,255,255,.78);
+        }
+
+        .frameWrap{ padding: 14px; display:flex; justify-content:center; align-items:flex-start; }
+        .frameResizable{
+            width: min(760px, 100%);
+            resize: both;
+            overflow: hidden;
+            border-radius: 18px;
+            border: 1px solid rgba(255,255,255,.14);
+            background: rgba(0,0,0,.22);
+            box-shadow: var(--shadow2);
+            position: relative;
+            min-width: 240px;
+            min-height: 240px;
+            max-width: 100%;
+            outline: none;
+        }
+        .ratio-1-1{ aspect-ratio: 1 / 1; }
+        .ratio-3-4{ aspect-ratio: 3 / 4; }
+        .ratio-4-3{ aspect-ratio: 4 / 3; }
+        .ratio-2-2{ aspect-ratio: 2 / 2; }
+
+        canvas{
+            width:100%; height:100%;
+            display:block;
+            cursor: grab;
+        }
+        canvas.dragging{ cursor: grabbing; }
+
+        .hint{
+            position:absolute; inset:0;
+            display:flex; align-items:center; justify-content:center;
+            text-align:center; padding: 18px;
+            color: rgba(255,255,255,.70);
+            line-height: 1.7; font-size: 13px;
+            pointer-events:none;
+        }
+        .kbd{
+            border: 1px solid rgba(255,255,255,.18);
+            background: rgba(255,255,255,.08);
+            padding: 2px 8px;
+            border-radius: 8px;
+            font-size: 12px;
+            color: rgba(255,255,255,.80);
+            margin: 0 4px;
+            display:inline-block;
+        }
+
+        .side{ padding: 12px; display:flex; flex-direction:column; gap: 10px; }
+        .block{
+            border: 1px solid rgba(255,255,255,.12);
+            border-radius: 14px;
+            padding: 12px;
+            background: rgba(0,0,0,.12);
+        }
+        .blockTitle{
+            font-size: 12px;
+            color: rgba(255,255,255,.85);
+            font-weight: 800;
+            margin-bottom: 10px;
+            display:flex;
+            justify-content:space-between;
+            gap:10px;
+            align-items:center;
+        }
+
+        .row{ display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+        .row .btn{ padding: 8px 10px; border-radius: 12px; font-size: 12px; }
+        .sliderRow{ display:flex; align-items:center; gap:10px; }
+        input[type="range"]{ width: 100%; }
+
+        .layerList{
+            display:flex; flex-direction:column; gap:8px;
+            max-height: 340px;
+            overflow:auto;
+            padding-right: 6px;
+        }
+        .layerItem{
+            border: 1px solid rgba(255,255,255,.12);
+            background: rgba(255,255,255,.05);
+            border-radius: 12px;
+            padding: 8px 10px;
+            display:flex;
+            justify-content:space-between;
+            gap:10px;
+            align-items:center;
+            cursor:pointer;
+            user-select:none;
+        }
+        .layerItem:hover{ border-color: rgba(56,189,248,.26); background: rgba(56,189,248,.06); }
+        .layerItem.active{
+            border-color: rgba(56,189,248,.50);
+            background: rgba(56,189,248,.10);
+        }
+        .layerName{
+            font-size: 12px;
+            color: rgba(255,255,255,.86);
+            overflow:hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            max-width: 220px;
+        }
+        .layerMeta{
+            font-size: 11px;
+            color: rgba(255,255,255,.60);
+            white-space: nowrap;
+        }
+
+        input[type="file"]{ display:none; }
+    </style>
+</head>
+<body>
+<div class="wrap">
+    <h1>多图层图片框：粘贴/上传多张 + 图层 + 透明度 + 截图</h1>
+    <div class="sub">
+        操作：先点击框格让它获得焦点，然后 <span class="kbd">Ctrl</span>+<span class="kbd">V</span> 可粘贴多张图片（若剪贴板里有多张）。
+        选中图片：点击画布上的图片或右侧图层列表。拖拽移动，滚轮缩放（仅对选中层生效）。
+    </div>
+
+    <div class="card">
+        <div class="toolbar">
+            <button class="btn" id="uploadBtn">上传多张图片</button>
+            <button class="btn danger" id="clearBtn" disabled>清空全部</button>
+
+            <button class="btn primary" data-ratio="1-1">1:1</button>
+            <button class="btn primary" data-ratio="3-4">3:4</button>
+            <button class="btn primary" data-ratio="4-3">4:3</button>
+            <button class="btn primary" data-ratio="2-2">2:2</button>
+
+            <button class="btn good" id="shotBtn" disabled>截图下载</button>
+
+            <div class="meta">
+                <span class="pill" id="ratioPill">比例：1:1</span>
+                <span class="pill" id="sizePill">画布：-</span>
+                <span class="pill" id="selPill">选中：无</span>
+                <span class="pill" id="hintPill">粘贴：点击框格后 Ctrl+V</span>
+            </div>
+        </div>
+
+        <div class="content">
+            <div class="panel">
+                <div class="panelHd">
+                    <span>框格（可拖拽右下角调整大小）</span>
+                    <span style="color:rgba(255,255,255,.6)">拖拽移动 · 滚轮缩放（选中图层）</span>
+                </div>
+                <div class="frameWrap">
+                    <div id="frame" class="frameResizable ratio-1-1" tabindex="0">
+                        <canvas id="canvas"></canvas>
+                        <div id="hint" class="hint">
+                            <div>
+                                ① 点击“上传多张图片”<br/>
+                                ② 或把图片拖拽到框格<br/>
+                                ③ 或点击框格后按 <span class="kbd">Ctrl</span>+<span class="kbd">V</span> 粘贴图片<br/><br/>
+                                多图层：点击图片选中 · 右侧可调层级与透明度
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="panel">
+                <div class="panelHd">
+                    <span>图层与属性</span>
+                    <span style="color:rgba(255,255,255,.6)">置顶=最上层</span>
+                </div>
+
+                <div class="side">
+                    <div class="block">
+                        <div class="blockTitle">
+                            <span>当前图层操作</span>
+                            <span style="color:rgba(255,255,255,.55); font-size:11px;" id="layerInfo">-</span>
+                        </div>
+
+                        <div class="row" style="margin-bottom:10px;">
+                            <button class="btn" id="upBtn" disabled>上一层</button>
+                            <button class="btn" id="downBtn" disabled>下一层</button>
+                            <button class="btn" id="topBtn" disabled>置顶</button>
+                            <button class="btn" id="bottomBtn" disabled>置底</button>
+                        </div>
+
+                        <div class="sliderRow">
+                            <span style="font-size:12px; color:rgba(255,255,255,.7); width:54px;">透明度</span>
+                            <input type="range" id="opacityRange" min="0" max="1" step="0.01" value="1" disabled />
+                            <span style="font-size:12px; color:rgba(255,255,255,.7); width:44px;" id="opacityVal">1.00</span>
+                        </div>
+
+                        <div class="row" style="margin-top:10px;">
+                            <button class="btn" id="fitBtn" disabled>适配</button>
+                            <button class="btn" id="coverBtn" disabled>铺满</button>
+                            <button class="btn" id="resetBtn" disabled>重置</button>
+                            <button class="btn danger" id="delBtn" disabled>删除图层</button>
+                        </div>
+                    </div>
+
+                    <div class="block">
+                        <div class="blockTitle">
+                            <span>图层列表</span>
+                            <span style="color:rgba(255,255,255,.55); font-size:11px;">点击选择</span>
+                        </div>
+                        <div id="layerList" class="layerList"></div>
+                    </div>
+
+                    <div class="block">
+                        <div class="blockTitle">小提示</div>
+                        <div style="color:rgba(255,255,255,.70); font-size:12px; line-height:1.6;">
+                            - 选中层：滚轮缩放、拖拽移动<br/>
+                            - 点击空白处：取消选中<br/>
+                            - 截图：导出当前框格大小内的画面
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <input id="fileInput" type="file" accept="image/*" multiple />
+    </div>
+</div>
+
+<script>
+    const frame = document.getElementById('frame');
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d', { alpha: false, desynchronized: true });
+
+    const hint = document.getElementById('hint');
+
+    const uploadBtn = document.getElementById('uploadBtn');
+    const fileInput = document.getElementById('fileInput');
+    const clearBtn = document.getElementById('clearBtn');
+    const shotBtn = document.getElementById('shotBtn');
+
+    const ratioPill = document.getElementById('ratioPill');
+    const sizePill = document.getElementById('sizePill');
+    const selPill = document.getElementById('selPill');
+    const hintPill = document.getElementById('hintPill');
+
+    const layerListEl = document.getElementById('layerList');
+    const layerInfo = document.getElementById('layerInfo');
+
+    const upBtn = document.getElementById('upBtn');
+    const downBtn = document.getElementById('downBtn');
+    const topBtn = document.getElementById('topBtn');
+    const bottomBtn = document.getElementById('bottomBtn');
+
+    const opacityRange = document.getElementById('opacityRange');
+    const opacityVal = document.getElementById('opacityVal');
+
+    const fitBtn = document.getElementById('fitBtn');
+    const coverBtn = document.getElementById('coverBtn');
+    const resetBtn = document.getElementById('resetBtn');
+    const delBtn = document.getElementById('delBtn');
+
+    // ===== 数据结构：每张图一个对象（图层）=====
+    // layers 顺序：0=底层，最后=顶层
+    let layers = [];
+    let selectedId = null;
+
+    // “最近一次点击过框格”的标记：解决 paste 不进来的核心
+    let frameArmed = false;
+
+    // 拖拽移动
+    let dragging = false;
+    let lastMouse = null;
+
+    const IMG_EXT_OK = new Set(['.jpg','.jpeg','.png','.webp','.gif','.bmp','.avif']);
+
+    const uid = () => Math.random().toString(36).slice(2,10) + Date.now().toString(36).slice(-4);
+
+    function dpr(){ return Math.max(1, window.devicePixelRatio || 1); }
+
+    function resizeCanvasToFrame(){
+        const rect = frame.getBoundingClientRect();
+        const w = Math.max(1, Math.floor(rect.width * dpr()));
+        const h = Math.max(1, Math.floor(rect.height * dpr()));
+        if (canvas.width !== w || canvas.height !== h){
+            canvas.width = w;
+            canvas.height = h;
+        }
+        sizePill.textContent = `画布：${canvas.width}×${canvas.height}`;
+        redraw();
+    }
+
+    function anyImage(){ return layers.length > 0; }
+
+    function setGlobalButtons(){
+        const has = anyImage();
+        clearBtn.disabled = !has;
+        shotBtn.disabled = !has;
+
+        hint.style.display = has ? 'none' : 'flex';
+    }
+
+    function getSelected(){
+        return layers.find(l => l.id === selectedId) || null;
+    }
+
+    function setSelected(id){
+        selectedId = id;
+        const sel = getSelected();
+        selPill.textContent = sel ? `选中：${sel.name}` : '选中：无';
+        updateRightPanel();
+        renderLayerList();
+        redraw();
+    }
+
+    // ===== 渲染 =====
+    function redraw(){
+        const cw = canvas.width, ch = canvas.height;
+        ctx.clearRect(0,0,cw,ch);
+        ctx.fillStyle = '#0b1220';
+        ctx.fillRect(0,0,cw,ch);
+
+        for (const l of layers){
+            if (!l.img) continue;
+            ctx.save();
+            ctx.globalAlpha = l.opacity;
+
+            // 绘制：以 (l.x, l.y) 为中心
+            const scale = l.baseScale * l.userScale;
+            const dw = l.img.naturalWidth * scale;
+            const dh = l.img.naturalHeight * scale;
+            const dx = l.x - dw/2;
+            const dy = l.y - dh/2;
+
+            ctx.imageSmoothingEnabled = true;
+            ctx.imageSmoothingQuality = 'high';
+            ctx.drawImage(l.img, dx, dy, dw, dh);
+
+            // 选中框
+            if (l.id === selectedId){
+                ctx.globalAlpha = 1;
+                ctx.strokeStyle = 'rgba(56,189,248,.85)';
+                ctx.lineWidth = Math.max(2, Math.floor(2*dpr()));
+                ctx.strokeRect(dx, dy, dw, dh);
+            }
+
+            ctx.restore();
+        }
+
+        setGlobalButtons();
+    }
+
+    // ===== 图层列表 UI =====
+    function renderLayerList(){
+        layerListEl.innerHTML = '';
+        // 列表显示从顶到低更符合直觉
+        const order = layers.slice().reverse();
+        for (const l of order){
+            const item = document.createElement('div');
+            item.className = 'layerItem' + (l.id === selectedId ? ' active' : '');
+            item.title = '点击选择该图层';
+
+            const left = document.createElement('div');
+            left.className = 'layerName';
+            left.textContent = l.name;
+
+            const right = document.createElement('div');
+            right.className = 'layerMeta';
+            right.textContent = `α ${l.opacity.toFixed(2)}`;
+
+            item.appendChild(left);
+            item.appendChild(right);
+
+            item.addEventListener('click', () => setSelected(l.id));
+            layerListEl.appendChild(item);
+        }
+    }
+
+    function updateRightPanel(){
+        const sel = getSelected();
+        const enabled = !!sel;
+
+        upBtn.disabled = !enabled;
+        downBtn.disabled = !enabled;
+        topBtn.disabled = !enabled;
+        bottomBtn.disabled = !enabled;
+
+        opacityRange.disabled = !enabled;
+        fitBtn.disabled = !enabled;
+        coverBtn.disabled = !enabled;
+        resetBtn.disabled = !enabled;
+        delBtn.disabled = !enabled;
+
+        if (!sel){
+            layerInfo.textContent = '-';
+            opacityVal.textContent = '1.00';
+            opacityRange.value = 1;
+            return;
+        }
+
+        const idx = layers.findIndex(x => x.id === sel.id);
+        layerInfo.textContent = `第 ${idx+1} 层 / 共 ${layers.length} 层`;
+        opacityRange.value = sel.opacity;
+        opacityVal.textContent = sel.opacity.toFixed(2);
+    }
+
+    // ===== hit test：从顶层开始找 =====
+    function hitTest(px, py){
+        for (let i = layers.length - 1; i >= 0; i--){
+            const l = layers[i];
+            if (!l.img) continue;
+            const scale = l.baseScale * l.userScale;
+            const dw = l.img.naturalWidth * scale;
+            const dh = l.img.naturalHeight * scale;
+            const dx = l.x - dw/2;
+            const dy = l.y - dh/2;
+            if (px >= dx && px <= dx+dw && py >= dy && py <= dy+dh){
+                return l.id;
+            }
+        }
+        return null;
+    }
+
+    // ===== 计算 baseScale：contain/cover =====
+    function computeBaseScaleForLayer(l, mode){
+        const cw = canvas.width, ch = canvas.height;
+        const iw = l.img.naturalWidth, ih = l.img.naturalHeight;
+        const sx = cw / iw;
+        const sy = ch / ih;
+        l.baseScale = (mode === 'cover') ? Math.max(sx, sy) : Math.min(sx, sy);
+    }
+
+    function resetLayer(l, mode='cover'){
+        computeBaseScaleForLayer(l, mode);
+        l.userScale = 1;
+        l.x = canvas.width/2;
+        l.y = canvas.height/2;
+        l.opacity = (l.opacity ?? 1);
+    }
+
+    // ===== 添加图层（从 blob/file）=====
+    async function addImageFromBlob(blob, nameHint='image'){
+        const url = URL.createObjectURL(blob);
+        const im = new Image();
+        im.decoding = 'async';
+
+        return new Promise((resolve, reject) => {
+            im.onload = () => {
+                // 这里不 revoke url（因为 img 会用它）；如果你想更严谨，可以转成 bitmap 再释放
+                const l = {
+                    id: uid(),
+                    name: nameHint,
+                    img: im,
+                    baseScale: 1,
+                    userScale: 1,
+                    x: canvas.width/2,
+                    y: canvas.height/2,
+                    opacity: 1
+                };
+                resetLayer(l, 'cover');
+                layers.push(l);          // 默认加到顶层
+                setSelected(l.id);
+                renderLayerList();
+                redraw();
+                resolve(l);
+            };
+            im.onerror = () => {
+                try { URL.revokeObjectURL(url); } catch {}
+                reject(new Error('load failed'));
+            };
+            im.src = url;
+        });
+    }
+
+    function isImageFile(file){
+        const name = (file.name || '').toLowerCase();
+        for (const ext of IMG_EXT_OK) if (name.endsWith(ext)) return true;
+        return (file.type || '').startsWith('image/');
+    }
+
+    async function addFiles(files){
+        const imgs = Array.from(files).filter(isImageFile);
+        for (const f of imgs){
+            await addImageFromBlob(f, f.name);
+        }
+        renderLayerList();
+        updateRightPanel();
+    }
+
+    // ===== 上传 =====
+    uploadBtn.addEventListener('click', () => fileInput.click());
+    fileInput.addEventListener('change', async () => {
+        const fs = fileInput.files;
+        if (fs && fs.length) await addFiles(fs);
+        fileInput.value = '';
+    });
+
+    // ===== 清空 =====
+    clearBtn.addEventListener('click', () => {
+        layers = [];
+        selectedId = null;
+        renderLayerList();
+        updateRightPanel();
+        redraw();
+    });
+
+    // ===== 比例切换 =====
+    document.querySelectorAll('[data-ratio]').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const ratio = btn.getAttribute('data-ratio');
+            frame.classList.remove('ratio-1-1','ratio-3-4','ratio-4-3','ratio-2-2');
+            frame.classList.add(`ratio-${ratio}`);
+            ratioPill.textContent = `比例：${ratio.replace('-', ':')}`;
+            resizeCanvasToFrame();
+            // 尺寸变了：不强制重置每层，只重绘
+            redraw();
+        });
+    });
+
+    // ===== 截图（导出当前窗格大小）=====
+    shotBtn.addEventListener('click', () => {
+        if (!anyImage()) return;
+        const dataUrl = canvas.toDataURL('image/png');
+        const a = document.createElement('a');
+        a.href = dataUrl;
+        a.download = `frame_${Date.now()}.png`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+    });
+
+    // ===== 图层层级 =====
+    function moveLayer(id, toIndex){
+        const idx = layers.findIndex(l => l.id === id);
+        if (idx < 0) return;
+        const [it] = layers.splice(idx, 1);
+        layers.splice(toIndex, 0, it);
+        renderLayerList();
+        redraw();
+        updateRightPanel();
+    }
+
+    upBtn.addEventListener('click', () => {
+        const sel = getSelected(); if (!sel) return;
+        const idx = layers.findIndex(l => l.id === sel.id);
+        // 上一层 = 往顶层方向（index+1）
+        if (idx < layers.length - 1) moveLayer(sel.id, idx + 1);
+    });
+
+    downBtn.addEventListener('click', () => {
+        const sel = getSelected(); if (!sel) return;
+        const idx = layers.findIndex(l => l.id === sel.id);
+        // 下一层 = 往底层方向（index-1）
+        if (idx > 0) moveLayer(sel.id, idx - 1);
+    });
+
+    topBtn.addEventListener('click', () => {
+        const sel = getSelected(); if (!sel) return;
+        moveLayer(sel.id, layers.length - 1);
+    });
+
+    bottomBtn.addEventListener('click', () => {
+        const sel = getSelected(); if (!sel) return;
+        moveLayer(sel.id, 0);
+    });
+
+    // ===== 透明度 =====
+    opacityRange.addEventListener('input', () => {
+        const sel = getSelected(); if (!sel) return;
+        sel.opacity = parseFloat(opacityRange.value);
+        opacityVal.textContent = sel.opacity.toFixed(2);
+        renderLayerList();
+        redraw();
+    });
+
+    // ===== 适配/铺满/重置（仅对选中图层）=====
+    fitBtn.addEventListener('click', () => {
+        const sel = getSelected(); if (!sel) return;
+        resetLayer(sel, 'fit');
+        updateRightPanel();
+        redraw();
+    });
+
+    coverBtn.addEventListener('click', () => {
+        const sel = getSelected(); if (!sel) return;
+        resetLayer(sel, 'cover');
+        updateRightPanel();
+        redraw();
+    });
+
+    resetBtn.addEventListener('click', () => {
+        const sel = getSelected(); if (!sel) return;
+        // 重置：保持当前 baseScale，但把 userScale 和偏移回到中心
+        sel.userScale = 1;
+        sel.x = canvas.width/2;
+        sel.y = canvas.height/2;
+        updateRightPanel();
+        redraw();
+    });
+
+    delBtn.addEventListener('click', () => {
+        const sel = getSelected(); if (!sel) return;
+        const idx = layers.findIndex(l => l.id === sel.id);
+        if (idx >= 0) layers.splice(idx,1);
+        // 选中顶层或最后一个
+        selectedId = layers.length ? layers[layers.length-1].id : null;
+        renderLayerList();
+        updateRightPanel();
+        redraw();
+    });
+
+    // ===== 画布交互：点击选择 / 拖拽移动 =====
+    function canvasPointFromEvent(e){
+        const rect = canvas.getBoundingClientRect();
+        const px = (e.clientX - rect.left) * dpr();
+        const py = (e.clientY - rect.top) * dpr();
+        return { px, py };
+    }
+
+    canvas.addEventListener('mousedown', (e) => {
+        if (!anyImage()) return;
+        const { px, py } = canvasPointFromEvent(e);
+        const hit = hitTest(px, py);
+        if (hit) setSelected(hit);
+        else setSelected(null);
+
+        // 只有选中层才拖拽
+        if (getSelected()){
+            dragging = true;
+            canvas.classList.add('dragging');
+            lastMouse = { x: e.clientX, y: e.clientY };
+        }
+    });
+
+    window.addEventListener('mousemove', (e) => {
+        if (!dragging) return;
+        const sel = getSelected();
+        if (!sel || !lastMouse) return;
+
+        const dx = (e.clientX - lastMouse.x) * dpr();
+        const dy = (e.clientY - lastMouse.y) * dpr();
+        sel.x += dx;
+        sel.y += dy;
+        lastMouse = { x: e.clientX, y: e.clientY };
+        redraw();
+    });
+
+    window.addEventListener('mouseup', () => {
+        dragging = false;
+        canvas.classList.remove('dragging');
+        lastMouse = null;
+    });
+
+    // ===== 滚轮缩放：只缩放选中层，且以鼠标点为中心 =====
+    canvas.addEventListener('wheel', (e) => {
+        const sel = getSelected();
+        if (!sel) return;
+        e.preventDefault();
+
+        const { px, py } = canvasPointFromEvent(e);
+
+        const prev = sel.userScale;
+        const factor = (e.deltaY < 0) ? 1.08 : 1 / 1.08;
+        let next = prev * factor;
+        next = Math.max(0.08, Math.min(12, next));
+
+        // 保持鼠标点稳定：缩放时调整中心
+        // 选中图层的当前scale
+        const base = sel.baseScale;
+        const sPrev = base * prev;
+        const sNext = base * next;
+        const k = sNext / sPrev;
+
+        // 鼠标点相对图层中心向量
+        const vx = px - sel.x;
+        const vy = py - sel.y;
+
+        // 缩放后向量变成 k 倍，为保持鼠标点位置不变，需要移动中心
+        sel.x = px - vx * k;
+        sel.y = py - vy * k;
+
+        sel.userScale = next;
+
+        updateRightPanel();
+        redraw();
+    }, { passive:false });
+
+    // ===== 拖拽把图片丢进来（多张）=====
+    frame.addEventListener('dragover', (e) => { e.preventDefault(); frame.style.borderColor = 'rgba(56,189,248,.45)'; });
+    frame.addEventListener('dragleave', () => { frame.style.borderColor = 'rgba(255,255,255,.14)'; });
+    frame.addEventListener('drop', async (e) => {
+        e.preventDefault();
+        frame.style.borderColor = 'rgba(255,255,255,.14)';
+        const fs = e.dataTransfer?.files;
+        if (fs && fs.length) await addFiles(fs);
+    });
+
+    // ===== 解决“粘贴不进来”的关键：focus + armed =====
+    frame.addEventListener('click', () => {
+        frame.focus();
+        frameArmed = true;
+        hintPill.textContent = '粘贴：已激活（Ctrl+V）';
+        setTimeout(() => {
+            // 一段时间后自动降级提示，但不强制关闭
+            hintPill.textContent = '粘贴：点击框格后 Ctrl+V';
+        }, 2500);
+    });
+
+    // 1) 优先：框格自己接 paste
+    frame.addEventListener('paste', async (e) => {
+        await handlePaste(e);
+    });
+
+    // 2) 兜底：document 监听 paste，只在 frameArmed 时接收
+    document.addEventListener('paste', async (e) => {
+        if (!frameArmed) return;
+        // 如果用户正在输入其他输入框，不抢
+        const tag = (document.activeElement?.tagName || '').toLowerCase();
+        if (tag === 'input' || tag === 'textarea') return;
+        await handlePaste(e);
+    });
+
+    async function handlePaste(e){
+        const items = e.clipboardData?.items;
+        if (!items) return;
+
+        const blobs = [];
+        for (const it of items){
+            if (it.type && it.type.startsWith('image/')){
+                const blob = it.getAsFile();
+                if (blob) blobs.push(blob);
+            }
+        }
+
+        if (blobs.length === 0) return;
+
+        e.preventDefault();
+        // 多张依次加入（保持顺序：后加入在上层）
+        for (let i=0; i<blobs.length; i++){
+            await addImageFromBlob(blobs[i], `pasted_${Date.now()}_${i+1}.png`);
+        }
+        renderLayerList();
+        updateRightPanel();
+        redraw();
+    }
+
+    // ===== ResizeObserver：框格尺寸变化 => canvas 同步（截图按窗格大小）=====
+    const ro = new ResizeObserver(() => resizeCanvasToFrame());
+    ro.observe(frame);
+    window.addEventListener('resize', resizeCanvasToFrame);
+
+    // 初始
+    resizeCanvasToFrame();
+    renderLayerList();
+    updateRightPanel();
+    redraw();
+</script>
+</body>
+</html>

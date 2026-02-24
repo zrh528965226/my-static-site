@@ -1,0 +1,823 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>Excel 读取 + 收集 + 句号拼接（美观版）</title>
+
+    <!-- 更舒服的字体（可用则用，不可用自动回退） -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <!-- Inter + Noto Sans SC(中文) -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet">
+
+    <style>
+        :root{
+            --bg1:#0b1220;
+            --bg2:#0b2a3a;
+            --bg3:#2b1a45;
+            --card: rgba(255,255,255,.08);
+            --card2: rgba(255,255,255,.12);
+            --border: rgba(255,255,255,.14);
+            --text: rgba(255,255,255,.92);
+            --muted: rgba(255,255,255,.70);
+            --muted2: rgba(255,255,255,.55);
+            --shadow: 0 18px 50px rgba(0,0,0,.35);
+            --shadow2: 0 10px 24px rgba(0,0,0,.25);
+            --radius: 16px;
+            --radius2: 12px;
+            --accent: #7dd3fc;   /* 天蓝 */
+            --accent2:#c4b5fd;   /* 淡紫 */
+            --danger:#fb7185;    /* 粉红 */
+            --ok:#34d399;        /* 绿色 */
+            --hlbg: rgba(255,215,0,.22);
+            --hlbd: rgba(255,215,0,.45);
+        }
+
+        *{ box-sizing:border-box; }
+        body{
+            margin:0;
+            color:var(--text);
+            font-family: Inter, "Noto Sans SC", "PingFang SC", "Microsoft YaHei", system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+            background:
+                    radial-gradient(1200px 700px at 10% 10%, rgba(125,211,252,.25), transparent 55%),
+                    radial-gradient(900px 600px at 90% 25%, rgba(196,181,253,.22), transparent 55%),
+                    radial-gradient(900px 700px at 40% 110%, rgba(52,211,153,.16), transparent 60%),
+                    linear-gradient(135deg, var(--bg1), var(--bg2) 45%, var(--bg3));
+            min-height:100vh;
+        }
+
+        .wrap{
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 24px 18px 40px;
+        }
+
+        .header{
+            display:flex;
+            align-items:flex-end;
+            justify-content:space-between;
+            gap:14px;
+            margin-bottom: 14px;
+        }
+
+        h1{
+            font-size: 22px;
+            margin:0;
+            letter-spacing: .2px;
+            font-weight: 750;
+        }
+        .sub{
+            margin-top:6px;
+            color:var(--muted);
+            font-size: 13px;
+            line-height: 1.5;
+        }
+
+        .pill{
+            display:inline-flex;
+            align-items:center;
+            gap:8px;
+            padding: 8px 12px;
+            border-radius: 999px;
+            background: rgba(255,255,255,.09);
+            border:1px solid var(--border);
+            box-shadow: var(--shadow2);
+            color: var(--muted);
+            font-size: 12px;
+            white-space: nowrap;
+        }
+
+        .grid{
+            display:grid;
+            grid-template-columns: 1.25fr .75fr;
+            gap: 14px;
+            margin-top: 14px;
+        }
+        @media (max-width: 980px){
+            .grid{ grid-template-columns: 1fr; }
+            .pill{ display:none; }
+        }
+
+        .card{
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            box-shadow: var(--shadow);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            overflow:hidden;
+        }
+        .card-hd{
+            padding: 14px 16px;
+            border-bottom: 1px solid rgba(255,255,255,.10);
+            display:flex;
+            align-items:center;
+            justify-content:space-between;
+            gap: 10px;
+        }
+        .card-title{
+            display:flex;
+            flex-direction:column;
+            gap:4px;
+        }
+        .card-title b{
+            font-size: 14px;
+            font-weight: 700;
+        }
+        .card-title span{
+            font-size: 12px;
+            color: var(--muted2);
+            line-height: 1.5;
+        }
+        .card-bd{
+            padding: 14px 16px 16px;
+        }
+
+        .row{
+            display:flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            align-items:center;
+        }
+
+        /* 输入/选择/按钮 */
+        input[type="file"]{
+            color: var(--muted);
+            padding: 8px 10px;
+            border-radius: 12px;
+            border:1px solid rgba(255,255,255,.16);
+            background: rgba(255,255,255,.06);
+        }
+        select, input[type="text"]{
+            padding: 10px 12px;
+            border-radius: 12px;
+            border: 1px solid rgba(255,255,255,.16);
+            background: rgba(255,255,255,.06);
+            color: var(--text);
+            outline: none;
+            min-width: 160px;
+        }
+        input[type="text"]::placeholder{ color: rgba(255,255,255,.45); }
+
+        .btn{
+            border: 1px solid rgba(255,255,255,.16);
+            background: rgba(255,255,255,.08);
+            color: var(--text);
+            padding: 10px 12px;
+            border-radius: 12px;
+            cursor:pointer;
+            transition: transform .12s ease, background .12s ease, border-color .12s ease, opacity .12s ease;
+            user-select:none;
+            font-weight: 600;
+            letter-spacing:.1px;
+        }
+        .btn:hover{ transform: translateY(-1px); background: rgba(255,255,255,.11); border-color: rgba(255,255,255,.24); }
+        .btn:active{ transform: translateY(0px); opacity:.95; }
+        .btn:disabled{ cursor:not-allowed; opacity:.45; transform:none; }
+        .btn.primary{
+            background: linear-gradient(135deg, rgba(125,211,252,.26), rgba(196,181,253,.22));
+            border-color: rgba(255,255,255,.22);
+        }
+        .btn.danger{
+            background: rgba(251,113,133,.14);
+            border-color: rgba(251,113,133,.22);
+        }
+        .btn.ok{
+            background: rgba(52,211,153,.14);
+            border-color: rgba(52,211,153,.22);
+        }
+
+        .meta{
+            color: var(--muted2);
+            font-size: 12px;
+        }
+
+        /* 表格更好看 */
+        .tableWrap{
+            width:100%;
+            overflow:auto;
+            border-radius: var(--radius2);
+            border:1px solid rgba(255,255,255,.12);
+            background: rgba(0,0,0,.12);
+        }
+        table{
+            width:100%;
+            border-collapse: separate;
+            border-spacing: 0;
+            min-width: 700px;
+        }
+        th, td{
+            border-bottom: 1px solid rgba(255,255,255,.10);
+            border-right: 1px solid rgba(255,255,255,.08);
+            padding: 10px 10px;
+            font-size: 13px;
+            vertical-align: top;
+            color: rgba(255,255,255,.88);
+        }
+        th{
+            position: sticky;
+            top: 0;
+            z-index: 2;
+            background: rgba(255,255,255,.10);
+            backdrop-filter: blur(8px);
+            font-weight: 700;
+            color: rgba(255,255,255,.90);
+        }
+        tr:last-child td{ border-bottom:none; }
+        td:last-child, th:last-child{ border-right:none; }
+
+        td.cell{
+            cursor:pointer;
+            user-select:none;
+            transition: background .12s ease, outline .12s ease, transform .08s ease;
+        }
+        td.cell:hover{
+            background: rgba(125,211,252,.10);
+            outline: 1px solid rgba(125,211,252,.22);
+            outline-offset:-1px;
+        }
+        td.cell:active{ transform: scale(0.995); }
+
+        /* JSON */
+        pre{
+            margin: 0;
+            background: rgba(0,0,0,.35);
+            border: 1px solid rgba(255,255,255,.10);
+            border-radius: var(--radius2);
+            padding: 12px;
+            overflow:auto;
+            max-height: 280px;
+            color: rgba(255,255,255,.90);
+            font-size: 12px;
+            line-height: 1.5;
+        }
+
+        /* 收集列表 */
+        .list{
+            border: 1px solid rgba(255,255,255,.12);
+            border-radius: var(--radius2);
+            background: rgba(0,0,0,.18);
+            max-height: 240px;
+            overflow:auto;
+            padding: 8px;
+        }
+        .item{
+            display:flex;
+            gap: 10px;
+            padding: 9px 10px;
+            border-radius: 12px;
+            border: 1px solid transparent;
+            transition: background .12s ease, border-color .12s ease;
+            align-items:flex-start;
+            cursor:pointer;
+        }
+        .item:hover{ background: rgba(255,255,255,.06); }
+        .item.selected{
+            border-color: rgba(125,211,252,.35);
+            background: rgba(125,211,252,.10);
+        }
+        .badge{
+            padding: 2px 8px;
+            border-radius: 999px;
+            border:1px solid rgba(255,255,255,.14);
+            background: rgba(255,255,255,.06);
+            font-size: 11px;
+            color: var(--muted);
+            white-space: nowrap;
+            margin-top: 2px;
+        }
+        .txt{
+            flex:1;
+            line-height: 1.45;
+            word-break: break-word;
+            white-space: pre-wrap;
+            color: rgba(255,255,255,.90);
+            font-size: 13px;
+        }
+
+        /* 拼接框格 */
+        .concat{
+            border: 1px dashed rgba(255,255,255,.22);
+            border-radius: var(--radius);
+            padding: 12px;
+            background: rgba(255,255,255,.04);
+        }
+        .concatText{
+            margin-top: 8px;
+            border-radius: var(--radius2);
+            border:1px solid rgba(255,255,255,.10);
+            background: rgba(0,0,0,.20);
+            padding: 10px;
+            min-height: 76px;
+            line-height: 1.6;
+            color: rgba(255,255,255,.92);
+            word-break: break-word;
+            white-space: pre-wrap;
+            font-size: 13px;
+        }
+
+        /* 高亮关键字 */
+        mark.hl{
+            background: var(--hlbg);
+            border: 1px solid var(--hlbd);
+            padding: 0 2px;
+            border-radius: 6px;
+            color: rgba(255,255,255,.95);
+        }
+
+        .small{
+            font-size: 12px;
+            color: var(--muted2);
+            line-height: 1.5;
+        }
+        /* ✅ 修复：下拉展开时 option 看不清的问题（恢复系统默认可读性） */
+        select {
+            color-scheme: dark;            /* 告诉浏览器用深色控件渲染（支持的浏览器更稳） */
+        }
+
+        /* 关键：不要让 option 继承透明背景或白色字体 */
+        select option {
+            background: #ffffff !important; /* 下拉列表背景 */
+            color: #111111 !important;      /* 下拉列表文字 */
+        }
+
+        /* 有些浏览器会用 option:checked / option:hover，统一保证可见 */
+        select option:checked,
+        select option:hover,
+        select option:focus {
+            background: #eaeaea !important;
+            color: #111111 !important;
+        }
+
+        /* Windows 上有时还会受系统高对比影响，增加这条更稳 */
+        select:focus {
+            outline: 2px solid rgba(125,211,252,.45);
+            outline-offset: 2px;
+        }
+
+    </style>
+</head>
+<body>
+<div class="wrap">
+    <div class="header">
+        <div>
+            <h1>Excel 读取 + 单元格收集 + 句号拼接</h1>
+            <div class="sub">上传 Excel 后，点击任意单元格会追加到“收集列表”，并同步生成“句号拼接文案”。支持撤销 / 删除 / 清空，支持关键字高亮。</div>
+        </div>
+        <div class="pill">✨ 纯前端 · 无需后端 · 点击一次添加一次（允许重复）</div>
+    </div>
+
+    <!-- 顶部控制区 -->
+    <div class="card">
+        <div class="card-hd">
+            <div class="card-title">
+                <b>控制面板</b>
+                <span>上传 Excel，选择 Sheet；输入关键字可高亮表格/收集/拼接内容（多关键词用空格分隔）。</span>
+            </div>
+            <div class="meta" id="statusText">未上传文件</div>
+        </div>
+        <div class="card-bd">
+            <div class="row">
+                <input id="fileInput" type="file" accept=".xlsx,.xls" />
+                <select id="sheetSelect" disabled>
+                    <option value="">请选择 Sheet</option>
+                </select>
+
+                <input id="kwInput" type="text" placeholder="关键字高亮（空格分隔）" style="min-width:240px;" disabled />
+
+                <button class="btn primary" id="copyJsonBtn" disabled>复制 JSON</button>
+                <button class="btn" id="copyConcatBtn" disabled>复制拼接结果</button>
+            </div>
+            <div class="small" style="margin-top:10px;">
+                小技巧：高亮支持多个词，例如：<span style="color:var(--accent)">苹果 发布 会</span>（用空格分隔）。
+            </div>
+        </div>
+    </div>
+
+    <div class="grid">
+        <!-- 左：表格 + JSON -->
+        <div class="card">
+            <div class="card-hd">
+                <div class="card-title">
+                    <b>表格预览（点击单元格收集）</b>
+                    <span>点击表格单元格会追加一次（允许重复），并记录来源地址。</span>
+                </div>
+                <div class="meta" id="tableMeta">-</div>
+            </div>
+            <div class="card-bd">
+                <div id="tableWrap" class="tableWrap">
+                    <div style="padding:14px; color:rgba(255,255,255,.55);">请先上传 Excel 文件</div>
+                </div>
+
+                <div style="height:12px;"></div>
+
+                <div class="card" style="background:rgba(255,255,255,.04); border-color: rgba(255,255,255,.10); box-shadow:none;">
+                    <div class="card-hd" style="border-bottom-color: rgba(255,255,255,.08);">
+                        <div class="card-title">
+                            <b>读取结果 JSON</b>
+                            <span>如果第一行是表头，会自动用表头当 key。</span>
+                        </div>
+                    </div>
+                    <div class="card-bd">
+                        <pre id="jsonOut">上传 Excel 后输出</pre>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 右：收集 + 拼接 -->
+        <div class="card">
+            <div class="card-hd">
+                <div class="card-title">
+                    <b>收集与拼接</b>
+                    <span>可选中一条再删除；撤销会回退最近一次操作。</span>
+                </div>
+                <div class="meta" id="collectorCount">0 条</div>
+            </div>
+            <div class="card-bd">
+                <div class="row" style="margin-bottom:10px;">
+                    <button class="btn" id="undoBtn" disabled>撤销</button>
+                    <button class="btn danger" id="deleteBtn" disabled>删除选中</button>
+                    <button class="btn" id="clearBtn" disabled>清空</button>
+                    <button class="btn ok" id="copyCollectedBtn" disabled>复制收集（换行）</button>
+                </div>
+
+                <div id="collectorList" class="list">
+                    <div style="padding:10px; color:rgba(255,255,255,.55);">暂无内容</div>
+                </div>
+
+                <div style="height:12px;"></div>
+
+                <div class="concat">
+                    <div class="card-title">
+                        <b>句号拼接框格</b>
+                        <span>按收集顺序用「句号。」拼接成一段（不加序号、不换行）。</span>
+                    </div>
+                    <div id="concatText" class="concatText" style="color:rgba(255,255,255,.55);">暂无内容</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- SheetJS -->
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script>
+    const fileInput = document.getElementById('fileInput');
+    const sheetSelect = document.getElementById('sheetSelect');
+    const kwInput = document.getElementById('kwInput');
+
+    const statusText = document.getElementById('statusText');
+    const tableMeta = document.getElementById('tableMeta');
+
+    const tableWrap = document.getElementById('tableWrap');
+    const jsonOut = document.getElementById('jsonOut');
+
+    const collectorListEl = document.getElementById('collectorList');
+    const collectorCountEl = document.getElementById('collectorCount');
+
+    const undoBtn = document.getElementById('undoBtn');
+    const deleteBtn = document.getElementById('deleteBtn');
+    const clearBtn = document.getElementById('clearBtn');
+    const copyCollectedBtn = document.getElementById('copyCollectedBtn');
+
+    const copyJsonBtn = document.getElementById('copyJsonBtn');
+    const copyConcatBtn = document.getElementById('copyConcatBtn');
+
+    const concatTextEl = document.getElementById('concatText');
+
+    let workbook = null;
+    let lastJson = null;
+
+    // 收集 items
+    let collected = []; // [{id, text, meta:{sheet,row,col,addr}}]
+    let selectedId = null;
+
+    // 撤销栈
+    const undoStack = [];
+
+    // 当前关键字（数组）
+    let keywords = [];
+
+    fileInput.addEventListener('change', async (e) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        try {
+            const arrayBuffer = await file.arrayBuffer();
+            workbook = XLSX.read(arrayBuffer, { type: 'array' });
+
+            sheetSelect.innerHTML = '';
+            workbook.SheetNames.forEach((name, idx) => {
+                const opt = document.createElement('option');
+                opt.value = name;
+                opt.textContent = `${idx + 1}. ${name}`;
+                sheetSelect.appendChild(opt);
+            });
+
+            sheetSelect.disabled = false;
+            kwInput.disabled = false;
+            copyJsonBtn.disabled = false;
+
+            statusText.textContent = `已加载：${file.name}`;
+            sheetSelect.value = workbook.SheetNames[0];
+            renderSheet(sheetSelect.value);
+
+        } catch (err) {
+            console.error(err);
+            alert('读取失败：请确认文件是有效的 .xlsx/.xls');
+        }
+    });
+
+    sheetSelect.addEventListener('change', () => {
+        if (!workbook) return;
+        renderSheet(sheetSelect.value);
+    });
+
+    kwInput.addEventListener('input', () => {
+        keywords = normalizeKeywords(kwInput.value);
+        // 重新渲染表格 + 收集 + 拼接（高亮）
+        if (workbook && sheetSelect.value) renderSheet(sheetSelect.value);
+        renderCollector();
+    });
+
+    copyJsonBtn.addEventListener('click', async () => {
+        if (!lastJson) return;
+        await copyText(JSON.stringify(lastJson, null, 2), '已复制 JSON 到剪贴板');
+    });
+
+    copyConcatBtn.addEventListener('click', async () => {
+        const text = buildConcatText();
+        if (!text) return;
+        await copyText(text, '已复制拼接结果到剪贴板');
+    });
+
+    // 收集操作
+    undoBtn.addEventListener('click', () => {
+        if (!undoStack.length) return;
+        const action = undoStack.pop();
+
+        if (action.type === 'add') {
+            const idx = collected.findIndex(x => x.id === action.item.id);
+            if (idx !== -1) {
+                collected.splice(idx, 1);
+                if (selectedId === action.item.id) selectedId = null;
+            }
+        } else if (action.type === 'delete') {
+            collected.splice(action.index, 0, action.item);
+        } else if (action.type === 'clear') {
+            collected = action.prevItems;
+            selectedId = action.prevSelectedId;
+        }
+        renderCollector();
+    });
+
+    deleteBtn.addEventListener('click', () => {
+        if (!selectedId) return;
+        const index = collected.findIndex(x => x.id === selectedId);
+        if (index === -1) return;
+
+        const [removed] = collected.splice(index, 1);
+        undoStack.push({ type: 'delete', item: removed, index });
+        selectedId = null;
+        renderCollector();
+    });
+
+    clearBtn.addEventListener('click', () => {
+        if (!collected.length) return;
+        undoStack.push({ type: 'clear', prevItems: collected.slice(), prevSelectedId: selectedId });
+        collected = [];
+        selectedId = null;
+        renderCollector();
+    });
+
+    copyCollectedBtn.addEventListener('click', async () => {
+        if (!collected.length) return;
+        const text = collected.map(it => it.text).join('\n');
+        await copyText(text, '已复制收集内容（换行）到剪贴板');
+    });
+
+    function renderSheet(sheetName){
+        const sheet = workbook.Sheets[sheetName];
+        if (!sheet) return;
+
+        const aoa = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: false, defval: "" });
+        const objRows = XLSX.utils.sheet_to_json(sheet, { raw: false, defval: "" });
+        lastJson = (objRows && objRows.length) ? objRows : aoaToObjectsWithABCKeys(aoa);
+
+        tableMeta.textContent = `Sheet：${sheetName} · 行数：${aoa.length}`;
+        jsonOut.textContent = JSON.stringify(lastJson, null, 2);
+
+        // 表格渲染
+        tableWrap.innerHTML = '';
+        tableWrap.appendChild(buildClickableTableFromAOA(aoa, sheetName));
+    }
+
+    function buildClickableTableFromAOA(aoa, sheetName){
+        const container = document.createElement('div');
+        container.className = 'tableWrap';
+
+        if (!aoa || !aoa.length){
+            container.innerHTML = `<div style="padding:14px; color:rgba(255,255,255,.55);">该 Sheet 为空</div>`;
+            return container;
+        }
+
+        const table = document.createElement('table');
+        const thead = document.createElement('thead');
+        const tbody = document.createElement('tbody');
+
+        const maxCols = Math.max(...aoa.map(r => r.length));
+
+        const trh = document.createElement('tr');
+        for (let c=0;c<maxCols;c++){
+            const th = document.createElement('th');
+            th.textContent = `${colName(c)}（${c+1}）`;
+            trh.appendChild(th);
+        }
+        thead.appendChild(trh);
+
+        aoa.forEach((row, r) => {
+            const tr = document.createElement('tr');
+            for (let c=0;c<maxCols;c++){
+                const td = document.createElement('td');
+                td.className = 'cell';
+
+                const value = (row[c] ?? "");
+                const addr = `${colName(c)}${r+1}`;
+
+                // 高亮渲染
+                td.innerHTML = highlightHTML(escapeHTML(String(value)), keywords);
+
+                td.addEventListener('click', () => {
+                    const text = String(value ?? "");
+                    const item = {
+                        id: randomId(),
+                        text,
+                        meta: { sheet: sheetName, row: r+1, col: c+1, addr }
+                    };
+                    collected.push(item);
+                    undoStack.push({ type:'add', item });
+                    selectedId = item.id;
+
+                    renderCollector();
+                });
+
+                tr.appendChild(td);
+            }
+            tbody.appendChild(tr);
+        });
+
+        table.appendChild(thead);
+        table.appendChild(tbody);
+
+        container.appendChild(table);
+        return container;
+    }
+
+    function renderCollector(){
+        // 按钮状态
+        undoBtn.disabled = undoStack.length === 0;
+        clearBtn.disabled = collected.length === 0;
+        copyCollectedBtn.disabled = collected.length === 0;
+        copyConcatBtn.disabled = collected.length === 0;
+        deleteBtn.disabled = !selectedId;
+
+        collectorCountEl.textContent = `${collected.length} 条`;
+
+        // 收集列表
+        collectorListEl.innerHTML = '';
+        if (!collected.length){
+            collectorListEl.innerHTML = `<div style="padding:10px; color:rgba(255,255,255,.55);">暂无内容</div>`;
+        } else {
+            collected.forEach((item, idx) => {
+                const row = document.createElement('div');
+                row.className = 'item' + (item.id === selectedId ? ' selected' : '');
+
+                const badge = document.createElement('div');
+                badge.className = 'badge';
+                badge.textContent = `${idx+1} · ${item.meta.sheet}!${item.meta.addr}`;
+
+                const txt = document.createElement('div');
+                txt.className = 'txt';
+                txt.innerHTML = highlightHTML(escapeHTML(item.text), keywords);
+
+                row.addEventListener('click', () => {
+                    selectedId = item.id;
+                    renderCollector();
+                });
+
+                row.appendChild(badge);
+                row.appendChild(txt);
+                collectorListEl.appendChild(row);
+            });
+        }
+
+        // 拼接框格
+        const concat = buildConcatText();
+        if (!concat){
+            concatTextEl.style.color = 'rgba(255,255,255,.55)';
+            concatTextEl.innerHTML = '暂无内容';
+        } else {
+            concatTextEl.style.color = 'rgba(255,255,255,.92)';
+            concatTextEl.innerHTML = highlightHTML(escapeHTML(concat), keywords);
+        }
+    }
+
+    // 句号拼接：不序号、不换行
+    // 规则：去空；去掉每段末尾句号避免“。。”；最后统一加一个句号
+    function buildConcatText(){
+        if (!collected.length) return "";
+
+        const parts = collected
+            .map(it => String(it.text ?? "").trim())
+            .filter(t => t.length > 0);
+
+        if (!parts.length) return "";
+
+        const normalized = parts.map(t => t.replace(/[。]+$/g, ""));
+        return normalized.join("。") + "。";
+        // 如果你不想最后那个句号，把上一行改成： return normalized.join("。");
+    }
+
+    function normalizeKeywords(input){
+        return input
+            .split(/\s+/)
+            .map(s => s.trim())
+            .filter(Boolean)
+            .slice(0, 12); // 防止太多导致卡顿
+    }
+
+    // 把文本中出现的关键词用 <mark> 包起来（支持多个关键词）
+    function highlightHTML(safeHtml, kws){
+        if (!kws || !kws.length) return safeHtml;
+
+        // 逐个关键词替换（简单稳）
+        let out = safeHtml;
+        kws.forEach(kw => {
+            const escaped = escapeRegExp(kw);
+            if (!escaped) return;
+            const re = new RegExp(escaped, 'gi');
+            out = out.replace(re, (m) => `<mark class="hl">${m}</mark>`);
+        });
+        return out;
+    }
+
+    function aoaToObjectsWithABCKeys(aoa){
+        if (!aoa || !aoa.length) return [];
+        const maxCols = Math.max(...aoa.map(r => r.length));
+        return aoa.map(row => {
+            const obj = {};
+            for (let c=0;c<maxCols;c++) obj[colName(c)] = (row[c] ?? "");
+            return obj;
+        });
+    }
+
+    function colName(index){
+        let n = index + 1, s = "";
+        while (n > 0){
+            const m = (n - 1) % 26;
+            s = String.fromCharCode(65 + m) + s;
+            n = Math.floor((n - 1) / 26);
+        }
+        return s;
+    }
+
+    async function copyText(text, okMsg){
+        try{
+            await navigator.clipboard.writeText(text);
+            alert(okMsg);
+        }catch{
+            const ta = document.createElement('textarea');
+            ta.value = text;
+            document.body.appendChild(ta);
+            ta.select();
+            document.execCommand('copy');
+            document.body.removeChild(ta);
+            alert(okMsg + '（兼容模式）');
+        }
+    }
+
+    function randomId(){
+        if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
+        return 'id_' + Math.random().toString(16).slice(2) + '_' + Date.now();
+    }
+
+    function escapeHTML(str){
+        return String(str)
+            .replaceAll('&', '&amp;')
+            .replaceAll('<', '&lt;')
+            .replaceAll('>', '&gt;')
+            .replaceAll('"', '&quot;')
+            .replaceAll("'", '&#039;');
+    }
+
+    function escapeRegExp(str){
+        return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    }
+
+    // 初次渲染
+    renderCollector();
+</script>
+</body>
+</html>

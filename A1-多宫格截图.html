@@ -1,0 +1,1028 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1"/>
+    <title>多宫格无缝拼图（2-9｜截图导出PNG｜裁剪缩放｜多文字）</title>
+    <style>
+        :root{
+            --ratio: 1 / 1;
+            --border: rgba(15, 23, 42, 0.16);
+            --bg: #ffffff;
+            --panel: rgba(255,255,255,0.78);
+            --text: #0f172a;
+            --cols: 2;
+        }
+        body{ margin:0;
+            background:
+                radial-gradient(1200px 600px at 20% 0%, rgba(99,102,241,0.18), transparent 60%),
+                radial-gradient(1000px 520px at 90% 15%, rgba(56,189,248,0.16), transparent 62%),
+                radial-gradient(900px 520px at 50% 100%, rgba(34,197,94,0.10), transparent 60%),
+                linear-gradient(180deg, #f8fafc 0%, #eef2ff 40%, #f1f5f9 100%);
+            background-attachment: fixed;
+            color:var(--text);
+            font-family: system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,"PingFang SC","Microsoft YaHei",sans-serif;
+        }
+        .wrap{ max-width: 1500px; margin: 0 auto; padding: 22px; }
+
+        .toolbar{
+            display:flex;
+            flex-wrap:wrap;
+            gap:12px;
+            align-items:flex-start;
+            justify-content:space-between;
+            padding: 14px;
+            border:1px solid rgba(255,255,255,0.55);
+            background: rgba(255,255,255,0.72);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border-radius: 18px;
+            margin-bottom: 14px;
+            box-shadow: 0 12px 30px rgba(15,23,42,0.10);
+        }
+        .group{ display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+
+        .btn{
+            cursor:pointer;
+            border: 1px solid rgba(15, 23, 42, 0.14);
+            background: rgba(255,255,255,0.65);
+            color:var(--text);
+            padding:10px 12px;
+            border-radius: 14px;
+            font-size:14px;
+            line-height:1;
+            user-select:none;
+            transition: transform .15s ease, box-shadow .15s ease, background .15s ease, border-color .15s ease;
+            white-space:nowrap;
+        }
+        .btn:hover{
+            transform: translateY(-1px);
+            background: rgba(255,255,255,0.88);
+            box-shadow: 0 10px 20px rgba(15,23,42,0.10);
+            border-color: rgba(99,102,241,0.35);
+        }
+        .btn:active{ transform: translateY(0px); }
+        .btn.primary{
+            border-color: rgba(99,102,241,0.55);
+            background: linear-gradient(180deg, rgba(99,102,241,0.20), rgba(99,102,241,0.10));
+        }
+        .btn.danger{
+            border-color: rgba(239,68,68,0.55);
+            background: linear-gradient(180deg, rgba(239,68,68,0.18), rgba(239,68,68,0.08));
+        }
+
+        .select, .input{
+            border: 1px solid rgba(15, 23, 42, 0.14);
+            background: rgba(255,255,255,0.70);
+            color:var(--text);
+            padding: 9px 10px;
+            border-radius: 14px;
+            font-size: 14px;
+            outline: none;
+            transition: box-shadow .15s ease, border-color .15s ease, background .15s ease;
+        }
+        .select:focus, .input:focus{
+            border-color: rgba(99,102,241,0.55);
+            box-shadow: 0 0 0 4px rgba(99,102,241,0.18);
+            background: rgba(255,255,255,0.92);
+        }
+
+        .hint{ font-size:13px; opacity:.85; max-width: 820px; line-height:1.5; }
+
+        .layout{
+            display:grid;
+            grid-template-columns: minmax(0, 1fr) 400px;
+            gap: 16px;
+            align-items:start;
+        }
+        @media (max-width: 1100px){
+            .layout{ grid-template-columns: 1fr; }
+            .rightCol{ position: static !important; }
+        }
+
+        /* ✅ 无缝宫格 */
+        .grid{
+            display:grid;
+            grid-template-columns: repeat(var(--cols), minmax(0, 1fr));
+            gap:0;
+            border: 1px solid rgba(255,255,255,0.55);
+            border-radius: 20px;
+            overflow:hidden;
+            background: rgba(255,255,255,0.55);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            box-shadow: 0 18px 44px rgba(15,23,42,0.14);
+        }
+        .tile{
+            position:relative;
+            min-width:0;
+            border-right:1px solid var(--border);
+            border-bottom:1px solid var(--border);
+            background: rgba(0,0,0,0.01);
+            cursor:pointer;
+            user-select:none;
+        }
+        .tile.last-col{ border-right:0; }
+        .tile.last-row{ border-bottom:0; }
+        .tile.selected{ box-shadow: inset 0 0 0 2px rgba(60,120,255,0.55); z-index: 1; }
+
+        .viewport{
+            width:100%;
+            aspect-ratio: var(--ratio);
+            background: rgba(0,0,0,0.03);
+            position:relative;
+            overflow:hidden;
+            touch-action:none;
+        }
+        .imgLayer{
+            position:absolute; left:50%; top:50%;
+            transform: translate(-50%,-50%) translate(var(--tx,0px), var(--ty,0px)) scale(var(--s,1));
+            transform-origin:center center; will-change:transform;
+            width:100%; height:100%; object-fit:cover;
+            pointer-events:none; user-select:none; -webkit-user-drag:none;
+            display:none;
+        }
+        .placeholder{
+            position:absolute; inset:0;
+            display:flex; align-items:center; justify-content:center;
+            text-align:center; padding:14px; font-size:13px; opacity:.78; line-height:1.5;
+            white-space: pre-line; pointer-events:none;
+        }
+
+        /* 文本层 */
+        .textLayer{ position:absolute; inset:0; pointer-events:none; }
+        .textLayer.showAll .textItem{ display:block; }
+        .textLayer.hideAll .textItem{ display:none; }
+
+        .textItem{
+            position:absolute; left:50%; top:22%;
+            transform: translate(-50%,-50%);
+            min-width:110px; max-width:92%;
+            padding:6px 10px; border-radius:10px;
+            font-size:34px; font-family:"Microsoft YaHei","PingFang SC",sans-serif; color:#111;
+            white-space: pre-wrap; line-height:1.15;
+            pointer-events:auto; cursor:move; user-select:none; outline:none;
+            border:1px solid transparent; background:transparent;
+        }
+        .textItem.selected{ border-color: rgba(60,120,255,0.8); background: rgba(255,255,255,0.60); }
+        .textItem[contenteditable="true"]{ cursor:text; user-select:text; border:1px dashed rgba(0,0,0,0.35); background: rgba(255,255,255,0.75); }
+
+        /* 艺术字 */
+        .style-stroke{ -webkit-text-stroke:2px rgba(0,0,0,0.75); paint-order: stroke fill; }
+        .style-glow{ text-shadow: 0 2px 10px rgba(0,0,0,0.22), 0 0 18px rgba(60,120,255,0.30); }
+        .style-boldstroke{ -webkit-text-stroke:3px rgba(0,0,0,0.85); text-shadow: 0 10px 18px rgba(0,0,0,0.16); font-weight:800; }
+        .style-gradient{
+            color: transparent;
+            background: linear-gradient(90deg,#ff4d4f,#faad14,#52c41a,#1677ff,#9254de);
+            -webkit-background-clip:text; background-clip:text;
+            -webkit-text-stroke:1px rgba(0,0,0,0.20);
+            text-shadow:0 10px 18px rgba(0,0,0,0.10);
+            font-weight:800;
+        }
+
+        /* 右侧 */
+        .rightCol{
+            display:flex; flex-direction:column; gap:14px;
+            position: sticky; top:12px;
+        }
+        .panel{
+            border: 1px solid rgba(255,255,255,0.55);
+            background: rgba(255,255,255,0.72);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border-radius: 18px;
+            overflow:hidden;
+            box-shadow: 0 14px 36px rgba(15,23,42,0.12);
+        }
+        .panelHeader{
+            padding: 12px 14px;
+            background: rgba(255,255,255,0.55);
+            border-bottom: 1px solid rgba(15,23,42,0.08);
+            display:flex;
+            align-items:center;
+            justify-content:space-between;
+            gap:10px;
+        }
+        .panelBody{ padding: 14px; display:flex; flex-direction:column; gap:10px; }
+        .row{ display:flex; gap:8px; flex-wrap:wrap; align-items:center; justify-content:space-between; }
+        .rowLeft{ display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+        .label{ font-size:12px; opacity:.8; min-width:86px; }
+        .small{ font-size:12px; opacity:.85; line-height:1.35; }
+        .badge{
+            font-size:12px; padding:3px 8px;
+            border:1px solid rgba(0,0,0,0.14);
+            border-radius:999px; background: rgba(0,0,0,0.03);
+            opacity:.9; white-space:nowrap;
+        }
+        input[type="file"]{ display:none; }
+
+        /* 小提示（可移除） */
+        .toast{
+            position: fixed;
+            left: 12px;
+            bottom: 12px;
+            z-index: 9999;
+            padding: 10px 12px;
+            border-radius: 14px;
+            border: 1px solid rgba(0,0,0,0.18);
+            background: rgba(255,255,255,0.92);
+            font-size: 12px;
+            line-height: 1.35;
+            box-shadow: 0 12px 30px rgba(0,0,0,0.12);
+            white-space: pre-line;
+            max-width: min(520px, calc(100vw - 24px));
+            display:none;
+        }
+    </style>
+</head>
+
+<body>
+<div class="wrap">
+    <div class="toolbar">
+        <div class="group">
+            <div style="font-size:13px;opacity:.85;">宫格数量：</div>
+            <button type="button" class="btn primary" data-count="2">2宫格</button>
+            <button type="button" class="btn" data-count="3">3宫格</button>
+            <button type="button" class="btn" data-count="4">4宫格</button>
+            <button type="button" class="btn" data-count="5">5宫格</button>
+            <button type="button" class="btn" data-count="6">6宫格</button>
+            <button type="button" class="btn" data-count="7">7宫格</button>
+            <button type="button" class="btn" data-count="8">8宫格</button>
+            <button type="button" class="btn" data-count="9">9宫格</button>
+        </div>
+
+        <div class="group" id="ratioGroup">
+            <div style="font-size:13px;opacity:.85;">比例：</div>
+            <button type="button" class="btn primary" data-ratio="1/1">1:1</button>
+            <button type="button" class="btn" data-ratio="3/4">3:4</button>
+            <button type="button" class="btn" data-ratio="16/9">16:9</button>
+            <button type="button" class="btn" data-ratio="9/16">9:16</button>
+        </div>
+
+        <div class="group">
+            <select class="select" id="wheelMode">
+                <option value="zoom">滚轮：缩放图片</option>
+                <option value="swap">滚轮：换图</option>
+            </select>
+            <button type="button" class="btn primary" id="toggleTexts">隐藏文字</button>
+            <button type="button" class="btn primary" id="shotBtn">截图保存PNG</button>
+        </div>
+
+        <div class="hint">
+            ✅ 宫格内部只显示图片/文字：点某个宫格选中（蓝框高亮），所有按钮都在右侧面板。<br/>
+            截图：需要所有宫格都已显示图片后再点“截图保存PNG”（含文字/裁剪效果一起导出）。
+        </div>
+    </div>
+
+    <div class="layout">
+        <!-- 要截图的区域：整个grid -->
+        <div class="grid" id="grid" aria-label="grid-capture"></div>
+
+        <div class="rightCol">
+            <div class="panel">
+                <div class="panelHeader">
+                    <div style="font-weight:600;">宫格操作面板</div>
+                    <div class="badge" id="tileBadge">未选中</div>
+                </div>
+                <div class="panelBody">
+                    <div class="small" id="tileInfo">请先点击任意宫格进行选中。</div>
+
+                    <div class="row">
+                        <div class="rowLeft">
+                            <button type="button" class="btn" id="pickFolderBtn" disabled>选择文件夹</button>
+                            <input id="pickFolderInput" type="file" webkitdirectory multiple accept="image/*">
+                            <button type="button" class="btn" id="shuffleBtn" disabled>更换随机图</button>
+                            <button type="button" class="btn" id="resetImgBtn" disabled>重置图片</button>
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <div class="rowLeft">
+                            <button type="button" class="btn" id="zoomInBtn" disabled>放大</button>
+                            <button type="button" class="btn" id="zoomOutBtn" disabled>缩小</button>
+                            <button type="button" class="btn primary" id="addTextBtn" disabled>新增文字</button>
+                        </div>
+                    </div>
+
+                    <div class="small">提示：浏览器安全限制，读取本地图片必须点“选择文件夹”授权。</div>
+                </div>
+            </div>
+
+            <div class="panel">
+                <div class="panelHeader">
+                    <div style="font-weight:600;">文字样式面板</div>
+                    <button type="button" class="btn danger" id="deleteText" disabled>删除选中文字</button>
+                </div>
+                <div class="panelBody">
+                    <div class="row" style="justify-content:space-between;">
+                        <div class="small" id="selInfo">未选中文字（点击某条文字进行选中）</div>
+                        <div class="badge" id="selBadge">未选中</div>
+                    </div>
+
+                    <div class="row">
+                        <div class="label">字体</div>
+                        <select class="select" id="fontSel" disabled>
+                            <option value='"Microsoft YaHei","PingFang SC",sans-serif'>微软雅黑</option>
+                            <option value='system-ui, -apple-system, Segoe UI, Roboto, Arial'>系统字体</option>
+                            <option value='"SimHei",sans-serif'>黑体</option>
+                            <option value='"SimSun",serif'>宋体</option>
+                            <option value='"KaiTi",serif'>楷体</option>
+                            <option value='"Times New Roman",serif'>Times</option>
+                            <option value='"Georgia",serif'>Georgia</option>
+                            <option value='"Impact",sans-serif'>Impact</option>
+                        </select>
+                    </div>
+
+                    <div class="row">
+                        <div class="label">字号(px)</div>
+                        <input class="input" id="sizeSel" type="number" min="10" max="200" value="34" disabled>
+                    </div>
+
+                    <div class="row">
+                        <div class="label">颜色</div>
+                        <input class="select" id="colorSel" type="color" value="#111111" disabled>
+                    </div>
+
+                    <div class="row">
+                        <div class="label">艺术字</div>
+                        <select class="select" id="styleSel" disabled>
+                            <option value="style-stroke">描边</option>
+                            <option value="style-glow">发光</option>
+                            <option value="style-boldstroke">粗描边</option>
+                            <option value="style-gradient">彩虹渐变</option>
+                        </select>
+                    </div>
+
+                    <div class="row">
+                        <div class="label">编辑</div>
+                        <div class="rowLeft">
+                            <button type="button" class="btn primary" id="toggleEdit" disabled>进入编辑</button>
+                            <button type="button" class="btn" id="resetTextStyle" disabled>重置样式</button>
+                        </div>
+                    </div>
+
+                    <div class="small">点文字选中→改样式；双击文字或点“进入编辑”编辑；编辑时不可拖拽。</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<!-- 截图库：需要联网加载一次 -->
+<script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+
+<script>
+    (() => {
+        const $ = (s, r=document) => r.querySelector(s);
+        const $$ = (s, r=document) => [...r.querySelectorAll(s)];
+        const toast = $("#toast");
+        const showToast = (msg, ms=2600) => {
+            toast.textContent = msg;
+            toast.style.display = "block";
+            clearTimeout(showToast._t);
+            showToast._t = setTimeout(()=> toast.style.display="none", ms);
+        };
+
+        const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
+        const isImageFile = (f) => f && f.type && f.type.startsWith("image/");
+        const nicePath = (f) => f.webkitRelativePath || f.name || "（未知文件）";
+        const randIndex = (n, exclude=-1) => {
+            if(n<=0) return -1;
+            if(n===1) return 0;
+            let i = Math.floor(Math.random()*n);
+            if(i===exclude) i = (i + 1 + Math.floor(Math.random()*(n-1))) % n;
+            return i;
+        };
+        const uid = () => Math.random().toString(36).slice(2,9) + "-" + Date.now().toString(36);
+        const rgbToHexSafe = (color) => {
+            if(/^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(color)) return color;
+            const m = color.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/i);
+            if(!m) return null;
+            const r = (+m[1]).toString(16).padStart(2,'0');
+            const g = (+m[2]).toString(16).padStart(2,'0');
+            const b = (+m[3]).toString(16).padStart(2,'0');
+            return `#${r}${g}${b}`;
+        };
+
+        // DOM
+        const gridEl = $("#grid");
+        const wheelMode = $("#wheelMode");
+        const toggleTextsBtn = $("#toggleTexts");
+        const shotBtn = $("#shotBtn");
+
+        const ratioBtns = $$('button[data-ratio]');
+        const countBtns = $$('button[data-count]');
+
+        // tile ops
+        const tileBadge = $("#tileBadge");
+        const tileInfo  = $("#tileInfo");
+        const pickFolderBtn = $("#pickFolderBtn");
+        const pickFolderInput = $("#pickFolderInput");
+        const shuffleBtn = $("#shuffleBtn");
+        const resetImgBtn = $("#resetImgBtn");
+        const zoomInBtn = $("#zoomInBtn");
+        const zoomOutBtn = $("#zoomOutBtn");
+        const addTextBtn = $("#addTextBtn");
+
+        // text panel
+        const selInfo = $("#selInfo");
+        const selBadge = $("#selBadge");
+        const fontSel = $("#fontSel");
+        const sizeSel = $("#sizeSel");
+        const colorSel = $("#colorSel");
+        const styleSel = $("#styleSel");
+        const toggleEdit = $("#toggleEdit");
+        const resetTextStyle = $("#resetTextStyle");
+        const deleteText = $("#deleteText");
+
+        // state
+        const tiles = new Map();
+        let tileCount = 2;
+        let cols = 2;
+        let rows = 1;
+        let textsVisible = true;
+
+        const activeTile = { id: null };
+        const selection  = { el: null, tileId: null };
+
+        function createTileState(id){
+            return {
+                id,
+                files: [],
+                idx: -1,
+                url: "",
+                s: 1, tx: 0, ty: 0,
+                dragging:false, lastX:0, lastY:0,
+                dom:null, vp:null, img:null, ph:null, textLayer:null
+            };
+        }
+
+        function enableTileOps(on){
+            pickFolderBtn.disabled = !on;
+            shuffleBtn.disabled = !on;
+            resetImgBtn.disabled = !on;
+            zoomInBtn.disabled = !on;
+            zoomOutBtn.disabled = !on;
+            addTextBtn.disabled = !on;
+        }
+        function enableTextPanel(on){
+            fontSel.disabled = !on;
+            sizeSel.disabled = !on;
+            colorSel.disabled = !on;
+            styleSel.disabled = !on;
+            toggleEdit.disabled = !on;
+            resetTextStyle.disabled = !on;
+            deleteText.disabled = !on;
+        }
+
+        function computeCols(count){
+            // 2宫格：2列；3：3列；4：2列；5-6：3列；7-8：4列；9：3列
+            if(count === 2) return 2;
+            if(count <= 3) return 3;
+            if(count === 4) return 2;
+            if(count <= 6) return 3;
+            if(count <= 8) return 4;
+            return 3;
+        }
+
+        function setAllTextVisibility(show){
+            textsVisible = show;
+            $$(".textLayer").forEach(layer => {
+                layer.classList.toggle("hideAll", !show);
+                layer.classList.toggle("showAll", show);
+            });
+            toggleTextsBtn.textContent = show ? "隐藏文字" : "显示文字";
+        }
+
+        function applySeams(){
+            for(const st of tiles.values()){
+                st.dom?.classList.remove("last-col","last-row");
+            }
+            for(let i=1;i<=tileCount;i++){
+                const st = tiles.get(i);
+                if(!st?.dom) continue;
+                const colIndex = (i-1) % cols;
+                const rowIndex = Math.floor((i-1)/cols);
+
+                const hasRight = (colIndex < cols-1) && (i+1 <= tileCount) && (Math.floor(i/cols) === rowIndex);
+                if(!hasRight) st.dom.classList.add("last-col");
+
+                const hasDown = (i + cols) <= tileCount;
+                if(!hasDown) st.dom.classList.add("last-row");
+            }
+        }
+
+        function setActiveTile(id){
+            if(activeTile.id && tiles.get(activeTile.id)?.dom){
+                tiles.get(activeTile.id).dom.classList.remove("selected");
+            }
+            activeTile.id = id;
+
+            if(id && tiles.get(id)?.dom){
+                tiles.get(id).dom.classList.add("selected");
+                tileBadge.textContent = `当前：宫格 #${id}`;
+                const st = tiles.get(id);
+                tileInfo.textContent = st.files.length
+                    ? `宫格 #${id} 已载入 ${st.files.length} 张图。`
+                    : `宫格 #${id} 尚未选择文件夹。请点击“选择文件夹”。`;
+                enableTileOps(true);
+            }else{
+                tileBadge.textContent = "未选中";
+                tileInfo.textContent = "请先点击任意宫格进行选中。";
+                enableTileOps(false);
+            }
+        }
+
+        function applyImgTransform(id){
+            const st = tiles.get(id);
+            if(!st?.img) return;
+            st.img.style.setProperty("--s", st.s);
+            st.img.style.setProperty("--tx", `${st.tx}px`);
+            st.img.style.setProperty("--ty", `${st.ty}px`);
+        }
+        function resetImgTransform(id){
+            const st = tiles.get(id);
+            if(!st) return;
+            st.s = 1; st.tx=0; st.ty=0;
+            applyImgTransform(id);
+        }
+        function zoomImg(id, factor){
+            const st = tiles.get(id);
+            if(!st) return;
+            st.s = clamp(st.s * factor, 0.4, 6);
+            applyImgTransform(id);
+        }
+        function setImage(id, idx){
+            const st = tiles.get(id);
+            if(!st) return;
+            if(idx<0 || idx>=st.files.length) return;
+            if(st.url) URL.revokeObjectURL(st.url);
+
+            const file = st.files[idx];
+            st.url = URL.createObjectURL(file);
+            st.idx = idx;
+            st.img.src = st.url;
+            st.img.style.display = "block";
+            st.ph.style.display = "none";
+            resetImgTransform(id);
+            if(activeTile.id === id){
+                tileInfo.textContent = `宫格 #${id}：${nicePath(file)}（共${st.files.length}张）`;
+            }
+        }
+        function shuffle(id){
+            const st = tiles.get(id);
+            if(!st) return;
+            if(!st.files.length){
+                st.ph.style.display="flex";
+                st.img.style.display="none";
+                if(activeTile.id===id) tileInfo.textContent = `宫格 #${id}：请先选择文件夹。`;
+                return;
+            }
+            setImage(id, randIndex(st.files.length, st.idx));
+        }
+
+        // text
+        function setEditing(el, on){ if(el) el.setAttribute("contenteditable", String(on)); }
+
+        function deselectText(){
+            if(selection.el){
+                selection.el.classList.remove("selected");
+                setEditing(selection.el, false);
+            }
+            selection.el = null;
+            selection.tileId = null;
+            refreshTextPanel();
+        }
+        function selectText(el){
+            if(selection.el === el) return;
+            if(selection.el){
+                selection.el.classList.remove("selected");
+                setEditing(selection.el, false);
+            }
+            selection.el = el;
+            selection.tileId = parseInt(el.dataset.tileId, 10);
+            el.classList.add("selected");
+            setActiveTile(selection.tileId);
+            refreshTextPanel(true);
+        }
+        function refreshTextPanel(keep=false){
+            const el = selection.el;
+            if(!el){
+                selInfo.textContent = "未选中文字（点击某条文字进行选中）";
+                selBadge.textContent = "未选中";
+                enableTextPanel(false);
+                toggleEdit.textContent = "进入编辑";
+                return;
+            }
+            enableTextPanel(true);
+            const editing = el.getAttribute("contenteditable") === "true";
+            selInfo.textContent = `已选中：宫格 #${selection.tileId}｜文字ID：${el.dataset.id}${editing ? "｜编辑中" : ""}`;
+            selBadge.textContent = `宫格 #${selection.tileId}`;
+            if(!keep){
+                fontSel.value = el.style.fontFamily || '"Microsoft YaHei","PingFang SC",sans-serif';
+                sizeSel.value = parseInt(el.style.fontSize || "34", 10);
+                const c = el.style.color;
+                if(c && c !== "transparent") colorSel.value = rgbToHexSafe(c) || colorSel.value;
+                const style = ["style-stroke","style-glow","style-boldstroke","style-gradient"].find(s => el.classList.contains(s)) || "style-stroke";
+                styleSel.value = style;
+            }
+            toggleEdit.textContent = editing ? "完成编辑" : "进入编辑";
+        }
+        function applyPanelToText(){
+            const el = selection.el;
+            if(!el) return;
+            el.style.fontFamily = fontSel.value;
+            el.style.fontSize = `${clamp(parseInt(sizeSel.value || "34", 10), 10, 200)}px`;
+            el.style.color = colorSel.value;
+            el.classList.remove("style-stroke","style-glow","style-boldstroke","style-gradient");
+            el.classList.add(styleSel.value);
+            refreshTextPanel(true);
+        }
+
+        function createTextItem(tileId){
+            const el = document.createElement("div");
+            el.className = "textItem style-stroke";
+            el.dataset.id = uid();
+            el.dataset.tileId = String(tileId);
+            el.textContent = "双击编辑文字";
+            el.style.left="50%"; el.style.top="22%"; el.style.transform="translate(-50%,-50%)";
+            el.style.fontFamily='"Microsoft YaHei","PingFang SC",sans-serif';
+            el.style.fontSize="34px";
+            el.style.color="#111111";
+
+            el.addEventListener("click", (ev)=>{ selectText(el); ev.stopPropagation(); });
+            el.addEventListener("dblclick", (ev)=>{
+                selectText(el);
+                setEditing(el, true);
+                el.focus();
+                ev.stopPropagation();
+            });
+
+            el.addEventListener("pointerdown", (ev)=>{
+                selectText(el);
+                if(el.getAttribute("contenteditable")==="true") return;
+
+                let dragging = true;
+                let lastX=ev.clientX, lastY=ev.clientY;
+                el.setPointerCapture?.(ev.pointerId);
+
+                const onMove = (mv)=>{
+                    if(!dragging) return;
+                    const dx = mv.clientX - lastX;
+                    const dy = mv.clientY - lastY;
+                    lastX = mv.clientX; lastY = mv.clientY;
+
+                    const rect = el.getBoundingClientRect();
+                    const parent = el.parentElement.getBoundingClientRect();
+                    const curLeft = rect.left - parent.left;
+                    const curTop  = rect.top  - parent.top;
+                    const nextLeft = curLeft + dx;
+                    const nextTop  = curTop + dy;
+
+                    el.style.transform="none";
+                    el.style.left = `${clamp(nextLeft, 0, parent.width-20)}px`;
+                    el.style.top  = `${clamp(nextTop, 0, parent.height-20)}px`;
+                };
+
+                const onUp = (up)=>{
+                    dragging=false;
+                    try{ el.releasePointerCapture?.(up.pointerId); }catch(_){}
+                    window.removeEventListener("pointermove", onMove);
+                    window.removeEventListener("pointerup", onUp);
+                    window.removeEventListener("pointercancel", onUp);
+                };
+
+                window.addEventListener("pointermove", onMove);
+                window.addEventListener("pointerup", onUp);
+                window.addEventListener("pointercancel", onUp);
+
+                ev.stopPropagation();
+                ev.preventDefault();
+            });
+
+            return el;
+        }
+
+        function buildTileDOM(id){
+            const st = tiles.get(id);
+
+            const tile = document.createElement("div");
+            tile.className = "tile";
+            tile.dataset.tileId = String(id);
+
+            const vp = document.createElement("div");
+            vp.className = "viewport";
+
+            const ph = document.createElement("div");
+            ph.className = "placeholder";
+            ph.textContent = `宫格 #${id}\n（选中后去右侧操作）`;
+
+            const img = document.createElement("img");
+            img.className = "imgLayer";
+            img.alt = `Tile ${id}`;
+
+            const textLayer = document.createElement("div");
+            textLayer.className = `textLayer ${textsVisible ? "showAll" : "hideAll"}`;
+
+            vp.appendChild(ph);
+            vp.appendChild(img);
+            vp.appendChild(textLayer);
+            tile.appendChild(vp);
+
+            st.dom = tile;
+            st.vp = vp;
+            st.ph = ph;
+            st.img = img;
+            st.textLayer = textLayer;
+
+            tile.addEventListener("click", ()=> setActiveTile(id));
+
+            // 图片交互
+            vp.addEventListener("pointerdown", (e)=>{
+                if(e.target?.classList?.contains("textItem")) return;
+                if(st.idx === -1) return;
+                deselectText();
+                st.dragging = true;
+                st.lastX = e.clientX; st.lastY = e.clientY;
+                vp.setPointerCapture?.(e.pointerId);
+            });
+            vp.addEventListener("pointermove", (e)=>{
+                if(!st.dragging) return;
+                const dx = e.clientX - st.lastX;
+                const dy = e.clientY - st.lastY;
+                st.lastX = e.clientX; st.lastY = e.clientY;
+                const speed = 1 / Math.max(st.s, 1);
+                st.tx += dx * speed; st.ty += dy * speed;
+                applyImgTransform(id);
+            });
+            const endDrag = (e)=>{
+                st.dragging = false;
+                try{ vp.releasePointerCapture?.(e.pointerId); }catch(_){}
+            };
+            vp.addEventListener("pointerup", endDrag);
+            vp.addEventListener("pointercancel", endDrag);
+            vp.addEventListener("pointerleave", endDrag);
+
+            vp.addEventListener("dblclick", ()=> resetImgTransform(id));
+            vp.addEventListener("wheel", (e)=>{
+                if(st.idx === -1) return;
+                e.preventDefault();
+                if(wheelMode.value === "swap"){ shuffle(id); return; }
+                zoomImg(id, e.deltaY < 0 ? 1.12 : 0.89);
+            }, {passive:false});
+
+            return tile;
+        }
+
+        function renderTiles(){
+            gridEl.innerHTML = "";
+            const frag = document.createDocumentFragment();
+
+            for(const [id, st] of tiles.entries()){
+                if(id > tileCount){
+                    if(st.url) URL.revokeObjectURL(st.url);
+                    tiles.delete(id);
+                }
+            }
+            for(let i=1;i<=tileCount;i++){
+                if(!tiles.has(i)) tiles.set(i, createTileState(i));
+                frag.appendChild(buildTileDOM(i));
+            }
+            gridEl.appendChild(frag);
+            applySeams();
+
+            if(activeTile.id && activeTile.id > tileCount) setActiveTile(null);
+            if(selection.el && selection.tileId > tileCount) deselectText();
+
+            setAllTextVisibility(textsVisible);
+        }
+
+        function setTileCount(count){
+            tileCount = clamp(count, 2, 9);
+            cols = computeCols(tileCount);
+            rows = Math.ceil(tileCount / cols);
+            document.documentElement.style.setProperty("--cols", cols);
+            renderTiles();
+            showToast(`已切换到：${tileCount} 宫格（每行 ${cols} 列）`, 1500);
+        }
+
+        // ===== 绑定按钮 =====
+        // count
+        countBtns.forEach(btn=>{
+            btn.addEventListener("click", ()=>{
+                const c = parseInt(btn.dataset.count, 10);
+                countBtns.forEach(b=>b.classList.remove("primary"));
+                btn.classList.add("primary");
+                setTileCount(c);
+            });
+        });
+
+        // ratio
+        ratioBtns.forEach(btn=>{
+            btn.addEventListener("click", ()=>{
+                const r = btn.dataset.ratio;
+                ratioBtns.forEach(b=>b.classList.remove("primary"));
+                btn.classList.add("primary");
+                document.documentElement.style.setProperty("--ratio", r.replace("/", " / "));
+                showToast(`比例切换：${r}`, 1200);
+            });
+        });
+
+        toggleTextsBtn.addEventListener("click", ()=>{
+            setAllTextVisibility(!textsVisible);
+            showToast(`文字：${textsVisible ? "显示" : "隐藏"}`, 1200);
+        });
+
+        // tile ops
+        pickFolderBtn.addEventListener("click", ()=>{
+            if(!activeTile.id) return;
+            pickFolderInput.value = "";
+            pickFolderInput.click();
+        });
+
+        pickFolderInput.addEventListener("change", (e)=>{
+            if(!activeTile.id) return;
+            const st = tiles.get(activeTile.id);
+            st.files = [...e.target.files].filter(isImageFile);
+            st.idx = -1;
+            tileInfo.textContent = st.files.length ? `宫格 #${activeTile.id}：已载入 ${st.files.length} 张图。` : `宫格 #${activeTile.id}：未发现图片`;
+            shuffle(activeTile.id);
+        });
+
+        shuffleBtn.addEventListener("click", ()=> activeTile.id && shuffle(activeTile.id));
+        resetImgBtn.addEventListener("click", ()=> activeTile.id && resetImgTransform(activeTile.id));
+        zoomInBtn.addEventListener("click", ()=> activeTile.id && zoomImg(activeTile.id, 1.15));
+        zoomOutBtn.addEventListener("click", ()=> activeTile.id && zoomImg(activeTile.id, 0.87));
+
+        addTextBtn.addEventListener("click", ()=>{
+            if(!activeTile.id) return;
+            const st = tiles.get(activeTile.id);
+            const el = createTextItem(activeTile.id);
+            st.textLayer.appendChild(el);
+            selectText(el);
+            setEditing(el, true);
+            el.focus();
+            const range = document.createRange();
+            range.selectNodeContents(el);
+            range.collapse(false);
+            const sel = window.getSelection();
+            sel.removeAllRanges();
+            sel.addRange(range);
+        });
+
+        // text panel
+        fontSel.addEventListener("change", applyPanelToText);
+        sizeSel.addEventListener("input", applyPanelToText);
+        colorSel.addEventListener("input", applyPanelToText);
+        styleSel.addEventListener("change", applyPanelToText);
+
+        toggleEdit.addEventListener("click", ()=>{
+            const el = selection.el;
+            if(!el) return;
+            const editing = el.getAttribute("contenteditable")==="true";
+            setEditing(el, !editing);
+            if(!editing){
+                el.focus();
+                const range = document.createRange();
+                range.selectNodeContents(el);
+                range.collapse(false);
+                const sel = window.getSelection();
+                sel.removeAllRanges();
+                sel.addRange(range);
+            }else{
+                el.blur();
+            }
+            refreshTextPanel(true);
+        });
+
+        resetTextStyle.addEventListener("click", ()=>{
+            const el = selection.el;
+            if(!el) return;
+            el.style.fontFamily = '"Microsoft YaHei","PingFang SC",sans-serif';
+            el.style.fontSize = "34px";
+            el.style.color = "#111111";
+            el.classList.remove("style-stroke","style-glow","style-boldstroke","style-gradient");
+            el.classList.add("style-stroke");
+            fontSel.value = '"Microsoft YaHei","PingFang SC",sans-serif';
+            sizeSel.value = 34;
+            colorSel.value = "#111111";
+            styleSel.value = "style-stroke";
+            refreshTextPanel(true);
+        });
+
+        deleteText.addEventListener("click", ()=>{
+            const el = selection.el;
+            if(!el) return;
+            el.remove();
+            deselectText();
+        });
+
+        // 选中文字
+        function selectText(el){
+            if(selection.el === el) return;
+            if(selection.el){
+                selection.el.classList.remove("selected");
+                setEditing(selection.el, false);
+            }
+            selection.el = el;
+            selection.tileId = parseInt(el.dataset.tileId, 10);
+            el.classList.add("selected");
+            setActiveTile(selection.tileId);
+            refreshTextPanel(true);
+        }
+
+        // ===== 截图保存 =====
+        function allTilesHaveImage(){
+            for(let i=1;i<=tileCount;i++){
+                const st = tiles.get(i);
+                if(!st || st.idx === -1 || !st.img || st.img.style.display === "none") return false;
+            }
+            return true;
+        }
+
+        function downloadBlobUrl(dataUrl, filename){
+            const a = document.createElement("a");
+            a.href = dataUrl;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+        }
+
+        shotBtn.addEventListener("click", async ()=>{
+            try{
+                if(typeof window.html2canvas !== "function"){
+                    showToast("截图库 html2canvas 未加载成功：请确保联网后刷新页面再试。", 3500);
+                    return;
+                }
+                // 编辑态先退出，避免光标框影响截图
+                if(selection.el && selection.el.getAttribute("contenteditable")==="true"){
+                    setEditing(selection.el, false);
+                    refreshTextPanel(true);
+                }
+
+                if(!allTilesHaveImage()){
+                    showToast("还不能截图：请确保每个宫格都已经显示图片（都加载完成）再截图。", 3200);
+                    return;
+                }
+
+                showToast("正在截图…", 1200);
+
+                // 为了更清爽：截图时临时取消选中边框（蓝框）
+                const prevActive = activeTile.id;
+                if(prevActive && tiles.get(prevActive)?.dom) tiles.get(prevActive).dom.classList.remove("selected");
+
+                // 按“当前页面看到的宫格”拍照：用屏幕实际像素尺寸截图，避免输出被拉伸
+                const rect = gridEl.getBoundingClientRect();
+                const scale = window.devicePixelRatio || 1;
+
+                const canvas = await window.html2canvas(gridEl, {
+                    backgroundColor: null,
+                    useCORS: true,
+                    scale,
+                    width: rect.width,
+                    height: rect.height,
+                    windowWidth: document.documentElement.clientWidth,
+                    windowHeight: document.documentElement.clientHeight
+                });
+
+                // 还原选中样式
+                if(prevActive) setActiveTile(prevActive);
+
+                const dataUrl = canvas.toDataURL("image/png");
+                const ts = new Date();
+                const stamp = [
+                    ts.getFullYear(),
+                    String(ts.getMonth()+1).padStart(2,"0"),
+                    String(ts.getDate()).padStart(2,"0"),
+                    String(ts.getHours()).padStart(2,"0"),
+                    String(ts.getMinutes()).padStart(2,"0"),
+                    String(ts.getSeconds()).padStart(2,"0")
+                ].join("");
+                downloadBlobUrl(dataUrl, `grid_${tileCount}_${stamp}.png`);
+                showToast("已保存截图到本地（下载文件夹）✅", 2200);
+            }catch(err){
+                showToast("截图失败：可能是浏览器限制或脚本错误。你可以把报错复制给我。", 3500);
+                console.error(err);
+            }
+        });
+
+        // ===== 初始化 =====
+        function init(){
+            // 默认 2宫格 高亮已在 HTML 里
+            enableTileOps(false);
+            enableTextPanel(false);
+            setAllTextVisibility(true);
+            setActiveTile(null);
+            deselectText();
+            setTileCount(2);
+            showToast("初始化完成：先点某个宫格，再去右侧选择文件夹加载图片。", 2400);
+        }
+
+        init();
+    })();
+</script>
+</body>
+</html>

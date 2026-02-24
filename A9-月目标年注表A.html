@@ -1,0 +1,1451 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>月历日程表（工作记录）+ 年备注表 + 导入导出</title>
+    <style>
+        :root{
+            --border:#a8c5e0;
+            --accent:#0969da;
+            --text:#1a365d;
+            --muted:#5a7a9e;
+            --radius:14px;
+            --shadow:0 2px 12px rgba(9,105,218,.08);
+            --shadow2:0 10px 30px rgba(0,0,0,.10);
+            --container: 1200px;
+        }
+        *{box-sizing:border-box}
+        body{
+            margin:0;
+            font-family:system-ui,-apple-system,"Segoe UI",Roboto,"PingFang SC","Microsoft YaHei",sans-serif;
+            background:linear-gradient(165deg,#cce4f5 0%,#e0eef9 40%,#e8f4fc 70%,#d8ebf8 100%);
+            background-attachment:fixed;
+            min-height:100vh;
+            color:var(--text);
+            padding:18px 14px 32px;
+        }
+        .wrap{max-width:var(--container);margin:0 auto;}
+        .title{
+            text-align:center;
+            font-size:28px;
+            font-weight:1000;
+            letter-spacing:.06em;
+            color:#0b3d6b;
+            margin: 6px 0 14px;
+        }
+        .toolbar{
+            display:flex;
+            gap:10px;
+            flex-wrap:wrap;
+            align-items:center;
+            justify-content:space-between;
+            background:rgba(255,255,255,.9);
+            border:1px solid var(--border);
+            border-radius:var(--radius);
+            box-shadow:var(--shadow);
+            padding:12px;
+            margin-bottom:12px;
+        }
+        .left, .right{display:flex;gap:8px;flex-wrap:wrap;align-items:center;}
+        .btn{
+            border:1px solid var(--border);
+            background:#fff;
+            color:var(--text);
+            border-radius:10px;
+            padding:9px 12px;
+            font-size:12px;
+            font-weight:900;
+            cursor:pointer;
+            transition:.15s;
+            user-select:none;
+            white-space:nowrap;
+        }
+        .btn:hover{background:#e8f2fc;border-color:var(--accent)}
+        .btn.primary{border-color:var(--accent);color:var(--accent)}
+        .monthText{
+            font-size:14px;
+            font-weight:1000;
+            color:#0b3d6b;
+            padding:0 6px;
+            white-space:nowrap;
+        }
+        .datePick{
+            border:1px solid rgba(168,197,224,.95);
+            border-radius:10px;
+            padding:9px 10px;
+            font-size:12px;
+            outline:none;
+            background:#fff;
+            color:var(--text);
+        }
+        .datePick:focus{
+            border-color:var(--accent);
+            box-shadow:0 0 0 3px rgba(9,105,218,.12);
+        }
+
+        .weekHead{
+            display:grid;
+            grid-template-columns:repeat(7,minmax(0,1fr));
+            gap:8px;
+            margin-bottom:8px;
+            padding:0 2px;
+        }
+        .wk{
+            text-align:center;
+            font-size:12px;
+            font-weight:1000;
+            color:#0b3d6b;
+            opacity:.9;
+        }
+
+        .grid{
+            display:grid;
+            grid-template-columns:repeat(7,minmax(0,1fr));
+            gap:8px;
+        }
+        .day{
+            background:rgba(255,255,255,.92);
+            border:1px solid var(--border);
+            border-radius:14px;
+            box-shadow:var(--shadow);
+            padding:10px;
+            min-height:120px;
+            display:flex;
+            flex-direction:column;
+            cursor:pointer;
+            transition:.12s;
+            overflow:hidden;
+        }
+        .day:hover{border-color:var(--accent);box-shadow:0 6px 18px rgba(9,105,218,.14);transform:translateY(-1px)}
+        .day.muted{
+            opacity:.55;
+            background:rgba(255,255,255,.75);
+        }
+        .day.today{
+            border-color:var(--accent);
+            box-shadow:0 0 0 3px rgba(9,105,218,.12), var(--shadow);
+        }
+        .dTop{
+            display:flex;
+            align-items:center;
+            justify-content:space-between;
+            gap:6px;
+            margin-bottom:6px;
+        }
+        .dNum{
+            font-weight:1000;
+            color:#0b3d6b;
+            font-size:14px;
+            line-height:1;
+        }
+        .badge{
+            font-size:11px;
+            font-weight:1000;
+            color:var(--accent);
+            border:1px solid rgba(9,105,218,.25);
+            background:rgba(9,105,218,.08);
+            padding:3px 8px;
+            border-radius:999px;
+            white-space:nowrap;
+        }
+        .preview{
+            flex:1;
+            font-size:12px;
+            color:#2c5282;
+            line-height:1.45;
+            white-space:pre-wrap;
+            word-break:break-word;
+            overflow:hidden;
+            display:-webkit-box;
+            -webkit-line-clamp:4;
+            -webkit-box-orient:vertical;
+        }
+        .empty{
+            color:var(--muted);
+            font-size:12px;
+            flex:1;
+            display:flex;
+            align-items:center;
+            justify-content:center;
+            opacity:.9;
+        }
+
+        /* Modal editor */
+        .mask{
+            position:fixed; inset:0;
+            background:rgba(0,0,0,.35);
+            display:none;
+            align-items:center;
+            justify-content:center;
+            padding:16px;
+            z-index:9999;
+        }
+        .modal{
+            width:min(900px, 98vw);
+            max-height:90vh;
+            overflow:auto;
+            background:#fff;
+            border-radius:16px;
+            border:1px solid rgba(168,197,224,.7);
+            box-shadow:var(--shadow2);
+            padding:14px;
+        }
+        .mHead{
+            position:sticky;
+            top:0;
+            background:#fff;
+            z-index:2;
+            display:flex;
+            gap:10px;
+            align-items:center;
+            justify-content:space-between;
+            padding:6px 6px 12px;
+            border-bottom:1px solid rgba(168,197,224,.55);
+        }
+        .mTitle{
+            font-weight:1000;
+            color:#0b3d6b;
+            font-size:14px;
+            white-space:nowrap;
+            overflow:hidden;
+            text-overflow:ellipsis;
+            max-width:60%;
+        }
+        .mActions{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;}
+        .field{
+            margin-top:12px;
+            display:flex;
+            flex-direction:column;
+            gap:6px;
+        }
+        label{
+            font-size:12px;
+            font-weight:1000;
+            color:#2c5282;
+        }
+        textarea.editor{
+            border:1px solid rgba(168,197,224,.95);
+            border-radius:12px;
+            padding:12px;
+            font-size:13px;
+            line-height:1.6;
+            outline:none;
+            min-height:280px;
+            resize:vertical;
+            color:var(--text);
+            background:#fff;
+            white-space:pre-wrap;
+        }
+        textarea.editor:focus{
+            border-color:var(--accent);
+            box-shadow:0 0 0 3px rgba(9,105,218,.12);
+        }
+        .tip{
+            margin-top:8px;
+            color:var(--muted);
+            font-size:12px;
+            line-height:1.5;
+        }
+
+        /* 右侧悬浮列：备注 + 统计 */
+        .floatCol{
+            position: fixed;
+            right: 14px;
+            top: 96px;
+            width: 320px;
+            max-height: calc(100vh - 120px);
+            display:flex;
+            flex-direction:column;
+            gap:10px;
+            z-index: 8888;
+        }
+        .panelFloat{
+            background: rgba(255,255,255,.90);
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            box-shadow: var(--shadow2);
+            padding: 10px;
+            display:flex;
+            flex-direction:column;
+            gap:8px;
+            backdrop-filter: blur(6px);
+            overflow:hidden;
+        }
+        .pHead{
+            display:flex;
+            align-items:center;
+            justify-content:space-between;
+            gap:8px;
+        }
+        .pTitle{
+            font-size: 13px;
+            font-weight: 1000;
+            color:#0b3d6b;
+            white-space:nowrap;
+        }
+        .pHint{
+            font-size:11px;
+            color:var(--muted);
+            line-height:1.4;
+        }
+
+        .noteTa{
+            width:100%;
+            min-height: 180px;
+            border:1px solid rgba(168,197,224,.95);
+            border-radius:12px;
+            padding:10px;
+            font-size:12px;
+            line-height:1.55;
+            outline:none;
+            background:#fff;
+            color:var(--text);
+            white-space: pre;
+            overflow: auto;
+            resize: vertical;
+        }
+        .noteTa:focus{
+            border-color:var(--accent);
+            box-shadow:0 0 0 3px rgba(9,105,218,.12);
+        }
+
+        .statRow{display:flex;gap:8px;align-items:center;}
+        .statInput{
+            flex:1;
+            border:1px solid rgba(168,197,224,.95);
+            border-radius:10px;
+            padding:9px 10px;
+            font-size:12px;
+            outline:none;
+            background:#fff;
+            color:var(--text);
+        }
+        .statInput:focus{
+            border-color:var(--accent);
+            box-shadow:0 0 0 3px rgba(9,105,218,.12);
+        }
+        .statList{
+            border:1px dashed rgba(168,197,224,.9);
+            border-radius:12px;
+            padding:8px;
+            background:#fff;
+            max-height: 260px;
+            overflow:auto;
+            display:flex;
+            flex-direction:column;
+            gap:8px;
+        }
+        .statItem{
+            border:1px solid rgba(168,197,224,.75);
+            border-radius:12px;
+            padding:8px;
+            display:flex;
+            gap:8px;
+            align-items:flex-start;
+        }
+        .statText{
+            flex:1;
+            min-width:0;
+            border:1px solid rgba(168,197,224,.85);
+            border-radius:10px;
+            padding:7px 8px;
+            font-size:12px;
+            line-height:1.35;
+            outline:none;
+            background:#fff;
+            color:var(--text);
+            white-space:nowrap;
+            overflow:auto;
+        }
+        .statMeta{font-size:11px;color:var(--muted);margin-top:4px;}
+        .statBtns{display:flex;flex-direction:column;gap:6px;flex-shrink:0;}
+
+        /* 左上角：悬浮窗（包含两个按钮） */
+        .fabBox{
+            position: fixed;
+            left: 14px;
+            top: 14px;
+            z-index: 9990;
+            display:flex;
+            flex-direction:column;
+            gap:8px;
+            padding:10px;
+            border-radius: 16px;
+            border: 1px solid rgba(9,105,218,.18);
+            background: rgba(255,255,255,.92);
+            box-shadow: var(--shadow2);
+            backdrop-filter: blur(6px);
+        }
+        .fabBtn{
+            border:1px solid rgba(168,197,224,.9);
+            background:#fff;
+            color:#0b3d6b;
+            border-radius: 999px;
+            padding: 10px 12px;
+            font-size: 12px;
+            font-weight: 1000;
+            cursor:pointer;
+            white-space:nowrap;
+        }
+        .fabBtn:hover{
+            border-color: var(--accent);
+            color: var(--accent);
+            background: #fff;
+        }
+
+        /* 年备注表视图 */
+        #viewYear{ display:none; }
+        .yearBar{
+            display:flex;
+            align-items:center;
+            justify-content:space-between;
+            gap:10px;
+            flex-wrap:wrap;
+            background:rgba(255,255,255,.9);
+            border:1px solid var(--border);
+            border-radius:var(--radius);
+            box-shadow:var(--shadow);
+            padding:12px;
+            margin-bottom:12px;
+        }
+        .yearTitle{
+            font-size:16px;
+            font-weight:1000;
+            color:#0b3d6b;
+            white-space:nowrap;
+        }
+        .yearGrid{
+            display:grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap:10px;
+        }
+        .yCell{
+            background:rgba(255,255,255,.92);
+            border:1px solid var(--border);
+            border-radius:14px;
+            box-shadow:var(--shadow);
+            padding:10px;
+            display:flex;
+            flex-direction:column;
+            min-height: 190px;
+            overflow:hidden;
+        }
+        .yHead{
+            display:flex;
+            align-items:center;
+            justify-content:space-between;
+            gap:8px;
+            margin-bottom:8px;
+        }
+        .yMonth{
+            font-size:13px;
+            font-weight:1000;
+            color:#0b3d6b;
+            white-space:nowrap;
+        }
+        .yTag{
+            font-size:11px;
+            font-weight:900;
+            color:var(--muted);
+            background: rgba(232,242,252,.75);
+            border:1px solid rgba(168,197,224,.75);
+            padding:3px 8px;
+            border-radius:999px;
+            white-space:nowrap;
+        }
+        .yTa{
+            flex:1;
+            width:100%;
+            border:1px solid rgba(168,197,224,.95);
+            border-radius:12px;
+            padding:10px;
+            font-size:12px;
+            line-height:1.55;
+            outline:none;
+            background:#fff;
+            color:var(--text);
+            white-space: pre;
+            overflow:auto;
+            resize:none;
+        }
+        .yTa:focus{
+            border-color:var(--accent);
+            box-shadow:0 0 0 3px rgba(9,105,218,.12);
+        }
+
+        /* 底部导出提示 */
+        .footerTip{
+            max-width: var(--container);
+            margin: 14px auto 0;
+            padding: 12px 14px;
+            background: rgba(255,255,255,.86);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            box-shadow: var(--shadow);
+        }
+        .footerTipTitle{
+            font-size: 12px;
+            font-weight: 1000;
+            color: #0b3d6b;
+            margin-bottom: 6px;
+        }
+        .footerTipCode{
+            margin: 0;
+            padding: 10px 12px;
+            background: rgba(9,105,218,.06);
+            border: 1px dashed rgba(9,105,218,.25);
+            border-radius: 12px;
+            font-size: 12px;
+            line-height: 1.55;
+            color: var(--text);
+            overflow: auto;
+            white-space: pre;
+        }
+
+        @media(max-width:1100px){
+            .floatCol{ display:none; }
+            .yearGrid{ grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        }
+        @media(max-width:520px){
+            .yearGrid{ grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+
+<body>
+<!-- 左上角悬浮窗：页面切换 -->
+<div class="fabBox" id="fabBox">
+    <button class="fabBtn" id="btnYearView">📒 年备注表</button>
+    <button class="fabBtn" id="btnBackMonth" style="display:none;">↩ 返回月度页面</button>
+</div>
+
+<!-- ===== 月度页面 ===== -->
+<div id="viewMonth">
+    <div class="wrap">
+        <div class="title">月历日程表 · 工作记录</div>
+
+        <div class="toolbar">
+            <div class="left">
+                <button class="btn" id="prevMonth">← 上个月</button>
+                <div class="monthText" id="monthText">2026-02</div>
+                <button class="btn" id="nextMonth">下个月 →</button>
+                <button class="btn" id="goToday">回到今天</button>
+                <button class="btn primary" id="exportMonth">导出本月完成/待办</button>
+            </div>
+            <div class="right">
+                <span style="font-size:12px;font-weight:1000;color:#2c5282;">跳到日期：</span>
+                <input class="datePick" id="datePick" type="date" />
+            </div>
+        </div>
+
+        <div class="weekHead">
+            <div class="wk">一</div><div class="wk">二</div><div class="wk">三</div><div class="wk">四</div><div class="wk">五</div><div class="wk">六</div><div class="wk">日</div>
+        </div>
+
+        <div class="grid" id="calGrid"></div>
+    </div>
+
+    <!-- 右侧悬浮列：备注 + 统计 -->
+    <div class="floatCol" aria-label="右侧悬浮工具" id="floatCol">
+        <!-- 备注（按月） -->
+        <aside class="panelFloat" aria-label="备注">
+            <div class="pHead">
+                <div class="pTitle">备注（按月）</div>
+                <button class="btn primary" id="saveNote">保存</button>
+            </div>
+            <textarea class="noteTa" id="noteTa" placeholder="这里写备注（会保存到当前月份）…"></textarea>
+            <div class="pHint" id="noteHint">自动保存：停止输入约 0.6 秒后写入本地；重开页面仍保留。</div>
+        </aside>
+
+        <!-- 统计（按月保存） -->
+        <aside class="panelFloat" aria-label="统计">
+            <div class="pHead">
+                <div class="pTitle">当月统计</div>
+                <div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end;">
+                    <button class="btn" id="exportMonthPkg">导出</button>
+                    <button class="btn" id="importMonthPkgBtn">导入</button>
+                    <button class="btn" id="saveStats">保存</button>
+                </div>
+            </div>
+
+            <!-- 隐藏的文件选择器：用于导入 -->
+            <input type="file" id="importMonthPkg" accept="application/json,.json" style="display:none;" />
+
+            <div class="statRow">
+                <input class="statInput" id="statKey" placeholder="输入字段，如 A / B / KPI…" />
+                <button class="btn primary" id="statSearch">搜索</button>
+            </div>
+
+            <div class="pHint">
+                规则：统计当前月份中出现的「字段+数字」（如 A1、A6），结果为 A:7（并记录出现次数）。
+            </div>
+
+            <div class="statList" id="statList"></div>
+        </aside>
+    </div>
+
+    <!-- 页面底部：导出提示 -->
+    <div class="footerTip" aria-label="本月导出提示">
+        <div class="footerTipTitle">本月导出提示：</div>
+        <pre class="footerTipCode">const doneKw = [/✅/g, /已完成/ig, /\bdone\b/ig, /完成：/g];
+const todoKw = [/待办/ig, /\btodo\b/ig, /未完成/ig, /待处理/ig];</pre>
+    </div>
+</div>
+
+<!-- ===== 年备注表页面 ===== -->
+<div id="viewYear">
+    <div class="wrap">
+        <div class="title">年备注表</div>
+
+        <div class="yearBar">
+            <div class="left">
+                <button class="btn" id="prevYear">← 上一年</button>
+                <div class="yearTitle" id="yearText">2026 年 · 12个月备注</div>
+                <button class="btn" id="nextYear">下一年 →</button>
+            </div>
+            <div class="right">
+                <button class="btn" id="exportYearNotes">导出年备注</button>
+                <button class="btn" id="importYearNotesBtn">导入年备注</button>
+                <button class="btn primary" id="backToMonth">返回月度页面</button>
+            </div>
+
+            <input type="file" id="importYearNotes" accept="application/json,.json" style="display:none;" />
+        </div>
+
+        <div class="yearGrid" id="yearGrid"></div>
+    </div>
+</div>
+
+<!-- 编辑弹窗（每日内容） -->
+<div class="mask" id="mask" aria-hidden="true">
+    <div class="modal" role="dialog" aria-modal="true">
+        <div class="mHead">
+            <div class="mTitle" id="mTitle">编辑：2026-02-03</div>
+            <div class="mActions">
+                <button class="btn" id="deleteDay">清空当天</button>
+                <button class="btn" id="close">关闭</button>
+                <button class="btn primary" id="save">保存</button>
+            </div>
+        </div>
+
+        <div class="field">
+            <label>当天工作内容（自由记录，支持多行）</label>
+            <textarea class="editor" id="editor" placeholder="例：
+- 09:30 复盘昨天 & 今天三件事
+- 11:00 推进XX项目：完成A模块
+- 15:00 开会：结论/待办
+- 18:00 总结：成果、问题、明日计划"></textarea>
+            <div class="tip">
+                ✅ 点击日历任意日期可编辑；保存后会写入本地（刷新不丢）。<br/>
+                ✅ 月视图只显示前几行预览；完整内容在编辑弹窗里。
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // ========= 存储 =========
+    const KEY = "ZRH_MONTH_CAL_V4";                 // 日历数据
+    const NOTE_OLD_KEY = "ZRH_MONTH_CAL_NOTE_V1";   // 旧版（单备注）兼容
+    const NOTE_PREFIX = "ZRH_MONTH_NOTE_";          // 新版：按月备注 NOTE_PREFIX + "YYYY-MM"
+    const STATS_PREFIX = "ZRH_MONTH_CAL_STATS_";    // 每月统计列表 STATS_PREFIX + "YYYY-MM"
+
+    function loadJSON(key, fallback){
+        try{
+            const raw = localStorage.getItem(key);
+            return raw ? JSON.parse(raw) : fallback;
+        }catch(e){
+            return fallback;
+        }
+    }
+    function saveJSON(key, obj){
+        localStorage.setItem(key, JSON.stringify(obj));
+    }
+
+    let data = loadJSON(KEY, {}); // { "YYYY-MM-DD": "text..." }
+
+    // ========= 日期工具 =========
+    const pad2 = n => String(n).padStart(2,'0');
+    function iso(d){
+        return `${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())}`;
+    }
+    function todayIso(){ return iso(new Date()); }
+    function ymText(d){ return `${d.getFullYear()}-${pad2(d.getMonth()+1)}`; }
+    function monFirstIndex(jsDay){ return (jsDay + 6) % 7; } // Mon=0..Sun=6
+    function firstDayOfMonth(view){ return new Date(view.getFullYear(), view.getMonth(), 1); }
+    function daysInMonth(view){ return new Date(view.getFullYear(), view.getMonth()+1, 0).getDate(); }
+    function getMonthRange(viewDate){
+        const y = viewDate.getFullYear();
+        const m = viewDate.getMonth();
+        const endDay = new Date(y, m+1, 0).getDate();
+        return { ym: `${y}-${pad2(m+1)}`, y, m, endDay };
+    }
+    function noteKeyForYM(ym){ return NOTE_PREFIX + ym; }
+
+    // ========= 视图状态 =========
+    let view = new Date();
+    view.setDate(1);
+    let yearViewYear = new Date().getFullYear();
+
+    // ========= DOM =========
+    const viewMonthEl = document.getElementById("viewMonth");
+    const viewYearEl = document.getElementById("viewYear");
+    const floatCol = document.getElementById("floatCol");
+
+    const btnYearView = document.getElementById("btnYearView");
+    const btnBackMonth = document.getElementById("btnBackMonth");
+    const backToMonthBtn = document.getElementById("backToMonth");
+
+    const calGrid = document.getElementById('calGrid');
+    const monthTextEl = document.getElementById('monthText');
+    const datePick = document.getElementById('datePick');
+
+    // 年备注表
+    const yearTextEl = document.getElementById("yearText");
+    const yearGridEl = document.getElementById("yearGrid");
+
+    function escapeHtml(s){
+        return String(s ?? "")
+            .replaceAll("&","&amp;")
+            .replaceAll("<","&lt;")
+            .replaceAll(">","&gt;")
+            .replaceAll('"',"&quot;")
+            .replaceAll("'","&#39;");
+    }
+    function previewText(full){
+        const t = (full || "").trim();
+        if(!t) return "";
+        const lines = t.replace(/\r\n/g,"\n").replace(/\r/g,"\n").split("\n");
+        return lines.slice(0, 4).join("\n");
+    }
+
+    // ========= 兼容迁移旧备注 =========
+    function migrateOldNoteIfNeeded(){
+        const { ym } = getMonthRange(view);
+        const newKey = noteKeyForYM(ym);
+        const newVal = localStorage.getItem(newKey);
+        if(newVal && newVal.length) return;
+
+        const oldVal = localStorage.getItem(NOTE_OLD_KEY);
+        if(oldVal && oldVal.trim()){
+            localStorage.setItem(newKey, oldVal);
+        }
+    }
+
+    // ========= 渲染月历 =========
+    function render(){
+        monthTextEl.textContent = ymText(view);
+
+        const today = todayIso();
+        const first = firstDayOfMonth(view);
+        const startPad = monFirstIndex(first.getDay());
+        const dim = daysInMonth(view);
+
+        const totalCells = 42;
+        const cells = [];
+
+        const prevMonthLastDay = new Date(view.getFullYear(), view.getMonth(), 0).getDate();
+        for(let i=0;i<startPad;i++){
+            const dayNum = prevMonthLastDay - (startPad - 1 - i);
+            const d = new Date(view.getFullYear(), view.getMonth()-1, dayNum);
+            cells.push({date: iso(d), inMonth:false});
+        }
+        for(let d=1; d<=dim; d++){
+            const dt = new Date(view.getFullYear(), view.getMonth(), d);
+            cells.push({date: iso(dt), inMonth:true});
+        }
+        while(cells.length < totalCells){
+            const idx = cells.length - (startPad + dim) + 1;
+            const dt = new Date(view.getFullYear(), view.getMonth()+1, idx);
+            cells.push({date: iso(dt), inMonth:false});
+        }
+
+        calGrid.innerHTML = "";
+        cells.forEach(c=>{
+            const txt = data[c.date] || "";
+            const has = (txt || "").trim().length > 0;
+
+            const el = document.createElement('div');
+            el.className = "day" + (c.inMonth ? "" : " muted") + (c.date === today ? " today" : "");
+            el.dataset.date = c.date;
+
+            const dNum = parseInt(c.date.slice(-2), 10);
+
+            el.innerHTML = `
+        <div class="dTop">
+          <div class="dNum">${dNum}</div>
+          ${has ? `<div class="badge">已记录</div>`
+                : `<div class="badge" style="opacity:.45;border-color:rgba(168,197,224,.6);color:#5a7a9e;background:rgba(232,242,252,.55)">空</div>`}
+        </div>
+        ${has ? `<div class="preview">${escapeHtml(previewText(txt))}</div>`
+                : `<div class="empty">点击添加内容</div>`}
+      `;
+            calGrid.appendChild(el);
+        });
+
+        migrateOldNoteIfNeeded();
+        loadNoteForCurrentMonth();
+        loadStatsForCurrentMonth();
+    }
+
+    // ========= 每日编辑弹窗 =========
+    const mask = document.getElementById('mask');
+    const mTitle = document.getElementById('mTitle');
+    const editor = document.getElementById('editor');
+    const btnClose = document.getElementById('close');
+    const btnSave = document.getElementById('save');
+    const btnDelete = document.getElementById('deleteDay');
+
+    let editingDate = null;
+
+    function openEditor(date){
+        editingDate = date;
+        mTitle.textContent = `编辑：${date}`;
+        editor.value = data[date] || "";
+        mask.style.display = "flex";
+        mask.setAttribute("aria-hidden", "false");
+        document.body.style.overflow = "hidden";
+        setTimeout(()=>editor.focus(), 0);
+    }
+    function closeEditor(){
+        mask.style.display = "none";
+        mask.setAttribute("aria-hidden", "true");
+        document.body.style.overflow = "";
+        editingDate = null;
+    }
+
+    btnClose.addEventListener('click', closeEditor);
+    mask.addEventListener('mousedown', (e)=>{ if(e.target === mask) closeEditor(); });
+
+    btnSave.addEventListener('click', ()=>{
+        if(!editingDate) return;
+        const val = editor.value || "";
+        if(val.trim()){
+            data[editingDate] = val;
+        }else{
+            delete data[editingDate];
+        }
+        saveJSON(KEY, data);
+        render();
+        closeEditor();
+    });
+
+    btnDelete.addEventListener('click', ()=>{
+        if(!editingDate) return;
+        const ok = confirm(`确定清空 ${editingDate} 的记录吗？`);
+        if(!ok) return;
+        delete data[editingDate];
+        saveJSON(KEY, data);
+        render();
+        closeEditor();
+    });
+
+    calGrid.addEventListener('click', (e)=>{
+        const cell = e.target.closest('.day');
+        if(!cell) return;
+        openEditor(cell.dataset.date);
+    });
+
+    // ========= 月份切换 / 日期选择 =========
+    document.getElementById('prevMonth').addEventListener('click', ()=>{
+        view = new Date(view.getFullYear(), view.getMonth()-1, 1);
+        render();
+    });
+    document.getElementById('nextMonth').addEventListener('click', ()=>{
+        view = new Date(view.getFullYear(), view.getMonth()+1, 1);
+        render();
+    });
+    document.getElementById('goToday').addEventListener('click', ()=>{
+        const t = new Date();
+        view = new Date(t.getFullYear(), t.getMonth(), 1);
+        datePick.value = todayIso();
+        render();
+    });
+    datePick.addEventListener('change', ()=>{
+        const v = datePick.value;
+        if(!v) return;
+        const y = parseInt(v.slice(0,4),10);
+        const m = parseInt(v.slice(5,7),10) - 1;
+        view = new Date(y, m, 1);
+        render();
+        openEditor(v);
+    });
+
+    // ========= 导出：本月完成 + 待办 =========
+    function exportCurrentMonthDoneTodo(){
+        const { ym } = getMonthRange(view);
+        const keys = Object.keys(data).filter(k => k.startsWith(ym + "-")).sort();
+        const nonEmpty = keys.filter(k => (data[k]||"").trim().length > 0);
+
+        const doneKw = [/✅/g, /已完成/ig, /\bdone\b/ig, /完成：/g];
+        const todoKw = [/待办/ig, /\btodo\b/ig, /未完成/ig, /待处理/ig];
+
+        function isDoneLine(line){ return doneKw.some(r => r.test(line)); }
+        function isTodoLine(line){ return todoKw.some(r => r.test(line)); }
+
+        const doneItems = [];
+        const todoItems = [];
+
+        nonEmpty.forEach(date=>{
+            const raw = (data[date] || "").replace(/\r\n/g,"\n").replace(/\r/g,"\n");
+            raw.split("\n").forEach(line=>{
+                const t = (line || "").trim();
+                if(!t) return;
+                if(isDoneLine(t)){ doneItems.push({date, text:t}); return; }
+                if(isTodoLine(t)){ todoItems.push({date, text:t}); return; }
+            });
+        });
+
+        const lines = [];
+        lines.push(`【${ym} 月度工作记录统计】`);
+        lines.push(`记录天数：${nonEmpty.length} 天`);
+        lines.push(`完成条目：${doneItems.length} 条`);
+        lines.push(`待办条目：${todoItems.length} 条`);
+        lines.push(`导出时间：${new Date().toLocaleString()}`);
+        lines.push("");
+
+        lines.push("========================================");
+        lines.push("【本月完成清单】");
+        lines.push("========================================\n");
+
+        if(doneItems.length === 0){
+            lines.push("（本月未识别到完成条目）\n");
+        }else{
+            let last = "";
+            for(const it of doneItems){
+                if(it.date !== last){ last = it.date; lines.push(`■ ${last}`); }
+                lines.push(`  - ${it.text}`);
+            }
+            lines.push("");
+        }
+
+        lines.push("========================================");
+        lines.push("【本月待办清单】");
+        lines.push("========================================\n");
+
+        if(todoItems.length === 0){
+            lines.push("（本月未识别到待办条目）\n");
+        }else{
+            let last2 = "";
+            for(const it of todoItems){
+                if(it.date !== last2){ last2 = it.date; lines.push(`■ ${last2}`); }
+                lines.push(`  - ${it.text}`);
+            }
+            lines.push("");
+        }
+
+        const blob = new Blob([lines.join("\n")], {type:"text/plain;charset=utf-8"});
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = `${ym}_完成与待办统计.txt`;
+        a.click();
+        setTimeout(()=>URL.revokeObjectURL(a.href), 800);
+    }
+    document.getElementById('exportMonth').addEventListener('click', exportCurrentMonthDoneTodo);
+
+    // ========= 备注（按月保存 + 自动保存） =========
+    const noteTa = document.getElementById('noteTa');
+    const saveNoteBtn = document.getElementById('saveNote');
+    const noteHint = document.getElementById('noteHint');
+
+    function loadNoteForCurrentMonth(){
+        const { ym } = getMonthRange(view);
+        noteTa.value = localStorage.getItem(noteKeyForYM(ym)) || "";
+        noteHint.textContent = `当前备注月份：${ym}（停止输入约 0.6 秒后自动保存）`;
+    }
+    function saveNoteForCurrentMonth(){
+        const { ym } = getMonthRange(view);
+        localStorage.setItem(noteKeyForYM(ym), noteTa.value || "");
+    }
+    // 年视图同步某个月
+    function syncYearCellFromStorage(ym){
+        if(viewYearEl.style.display !== "block") return;
+        const ta = yearGridEl.querySelector(`textarea[data-ym="${ym}"]`);
+        if(ta) ta.value = localStorage.getItem(noteKeyForYM(ym)) || "";
+    }
+
+    let noteTimer = null;
+    noteTa.addEventListener('input', ()=>{
+        clearTimeout(noteTimer);
+        noteTimer = setTimeout(()=>{
+            saveNoteForCurrentMonth();
+            syncYearCellFromStorage(getMonthRange(view).ym);
+        }, 600);
+    });
+    saveNoteBtn.addEventListener('click', ()=>{
+        saveNoteForCurrentMonth();
+        syncYearCellFromStorage(getMonthRange(view).ym);
+        const old = saveNoteBtn.textContent;
+        saveNoteBtn.textContent = "已保存";
+        setTimeout(()=>saveNoteBtn.textContent = old, 900);
+    });
+
+    // ========= 统计（按月保存） =========
+    const statKeyEl = document.getElementById('statKey');
+    const statSearchBtn = document.getElementById('statSearch');
+    const statListEl = document.getElementById('statList');
+    const saveStatsBtn = document.getElementById('saveStats');
+
+    let statsRows = []; // [{id, key, sum, count, displayText}]
+
+    function statsStorageKey(){
+        const { ym } = getMonthRange(view);
+        return STATS_PREFIX + ym;
+    }
+    function saveStats(){ saveJSON(statsStorageKey(), statsRows); }
+    function loadStatsForCurrentMonth(){
+        statsRows = loadJSON(statsStorageKey(), []);
+        renderStatsList();
+    }
+    function makeId(){ return String(Date.now()) + "_" + Math.random().toString(16).slice(2); }
+    function normalizeKey(s){ return (s || "").trim(); }
+
+    function computeKeySumForMonth(key){
+        const k = normalizeKey(key);
+        if(!k) return {sum:0, count:0};
+
+        const { ym } = getMonthRange(view);
+        const keys = Object.keys(data).filter(d => d.startsWith(ym + "-"));
+
+        let sum = 0, count = 0;
+        const escaped = k.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        const re = new RegExp(`(^|[^0-9A-Za-z])(${escaped})\\s*[:：_\\-]?\\s*(\\d+)`, "g");
+
+        keys.forEach(date=>{
+            const raw = (data[date] || "").replace(/\r\n/g,"\n").replace(/\r/g,"\n");
+            const lines = raw.split("\n");
+            for(const line of lines){
+                let m;
+                while((m = re.exec(line)) !== null){
+                    const num = parseInt(m[3], 10);
+                    if(Number.isFinite(num)){ sum += num; count += 1; }
+                }
+                re.lastIndex = 0;
+            }
+        });
+
+        return {sum, count};
+    }
+
+    function addStatResult(key){
+        const k = normalizeKey(key);
+        if(!k) return;
+
+        const {sum, count} = computeKeySumForMonth(k);
+        const displayText = `${k}:${sum}${count ? `（${count}次）` : "（0次）"}`;
+
+        statsRows.unshift({ id: makeId(), key: k, sum, count, displayText });
+        saveStats();
+        renderStatsList();
+    }
+
+    function renderStatsList(){
+        statListEl.innerHTML = "";
+        if(statsRows.length === 0){
+            const empty = document.createElement('div');
+            empty.className = "pHint";
+            empty.textContent = "暂无统计结果。输入字段后点击“搜索”。";
+            statListEl.appendChild(empty);
+            return;
+        }
+
+        statsRows.forEach(row=>{
+            const item = document.createElement('div');
+            item.className = "statItem";
+            item.dataset.id = row.id;
+
+            const left = document.createElement('div');
+            left.style.flex = "1";
+            left.style.minWidth = "0";
+
+            const input = document.createElement('input');
+            input.className = "statText";
+            input.value = row.displayText;
+
+            const meta = document.createElement('div');
+            meta.className = "statMeta";
+            meta.textContent = `字段：${row.key} ｜ 求和：${row.sum} ｜ 次数：${row.count}`;
+
+            left.appendChild(input);
+            left.appendChild(meta);
+
+            const btns = document.createElement('div');
+            btns.className = "statBtns";
+
+            const del = document.createElement('button');
+            del.className = "btn";
+            del.textContent = "删除";
+
+            const refresh = document.createElement('button');
+            refresh.className = "btn primary";
+            refresh.textContent = "重算";
+
+            btns.appendChild(refresh);
+            btns.appendChild(del);
+
+            item.appendChild(left);
+            item.appendChild(btns);
+
+            let t = null;
+            input.addEventListener('input', ()=>{
+                clearTimeout(t);
+                t = setTimeout(()=>{
+                    row.displayText = input.value;
+                    saveStats();
+                }, 500);
+            });
+
+            del.addEventListener('click', ()=>{
+                const ok = confirm("确定删除这条统计结果吗？");
+                if(!ok) return;
+                statsRows = statsRows.filter(r => r.id !== row.id);
+                saveStats();
+                renderStatsList();
+            });
+
+            refresh.addEventListener('click', ()=>{
+                const {sum, count} = computeKeySumForMonth(row.key);
+                row.sum = sum;
+                row.count = count;
+                row.displayText = `${row.key}:${row.sum}${row.count ? `（${row.count}次）` : "（0次）"}`;
+                saveStats();
+                renderStatsList();
+            });
+
+            statListEl.appendChild(item);
+        });
+    }
+
+    statSearchBtn.addEventListener('click', ()=>{
+        addStatResult(statKeyEl.value);
+        statKeyEl.value = "";
+        statKeyEl.focus();
+    });
+    statKeyEl.addEventListener('keydown', (e)=>{
+        if(e.key === "Enter"){ e.preventDefault(); statSearchBtn.click(); }
+    });
+    saveStatsBtn.addEventListener('click', ()=>{
+        saveStats();
+        const old = saveStatsBtn.textContent;
+        saveStatsBtn.textContent = "已保存";
+        setTimeout(()=>saveStatsBtn.textContent = old, 900);
+    });
+
+    // ======================
+    // 本月统计：导出 / 导入（JSON 包）
+    // 导出内容：当月每日记录 + 当月备注 + 当月统计列表
+    // ======================
+    const exportMonthPkgBtn = document.getElementById("exportMonthPkg");
+    const importMonthPkgBtn = document.getElementById("importMonthPkgBtn");
+    const importMonthPkgInput = document.getElementById("importMonthPkg");
+
+    function monthDatesOf(ym){
+        return Object.keys(data).filter(k => k.startsWith(ym + "-")).sort();
+    }
+
+    function exportMonthPackage(){
+        const { ym } = getMonthRange(view);
+
+        const monthDates = monthDatesOf(ym);
+        const monthEntries = {};
+        monthDates.forEach(d => { monthEntries[d] = data[d]; });
+
+        const note = localStorage.getItem(noteKeyForYM(ym)) || "";
+        const stats = loadJSON(STATS_PREFIX + ym, []);
+
+        const pkg = {
+            schema: "zrh-month-package",
+            version: 1,
+            ym,
+            exportedAt: new Date().toISOString(),
+            note,
+            stats,
+            entries: monthEntries
+        };
+
+        const blob = new Blob([JSON.stringify(pkg, null, 2)], {type:"application/json;charset=utf-8"});
+        const a = document.createElement("a");
+        a.href = URL.createObjectURL(blob);
+        a.download = `${ym}_月度数据包_可导入.json`;
+        a.click();
+        setTimeout(()=>URL.revokeObjectURL(a.href), 800);
+    }
+
+    function importMonthPackageObject(pkg){
+        if(!pkg || pkg.schema !== "zrh-month-package"){
+            alert("导入失败：不是可识别的数据包（schema 不匹配）。");
+            return;
+        }
+        if(!pkg.ym || !/^\d{4}-\d{2}$/.test(pkg.ym)){
+            alert("导入失败：ym 格式不正确（应为 YYYY-MM）。");
+            return;
+        }
+
+        const curYM = getMonthRange(view).ym;
+
+        if(pkg.ym !== curYM){
+            const ok = confirm(
+                `导入包月份是 ${pkg.ym}，但你当前页面月份是 ${curYM}。\n\n` +
+                `点「确定」：自动跳转到 ${pkg.ym} 并导入。\n` +
+                `点「取消」：终止导入。`
+            );
+            if(!ok) return;
+
+            const y = parseInt(pkg.ym.slice(0,4), 10);
+            const m = parseInt(pkg.ym.slice(5,7), 10) - 1;
+            view = new Date(y, m, 1);
+        }
+
+        const { ym } = getMonthRange(view);
+
+        // 覆盖模式：先清空当前月旧数据
+        monthDatesOf(ym).forEach(d => { delete data[d]; });
+
+        // 写入 entries
+        if(pkg.entries && typeof pkg.entries === "object"){
+            Object.keys(pkg.entries).forEach(d=>{
+                if(d.startsWith(ym + "-")){
+                    const v = String(pkg.entries[d] ?? "");
+                    if(v.trim()){
+                        data[d] = v;
+                    }
+                }
+            });
+        }
+
+        // 写入当月备注
+        if(typeof pkg.note === "string"){
+            localStorage.setItem(noteKeyForYM(ym), pkg.note);
+        }
+
+        // 写入当月统计列表
+        if(Array.isArray(pkg.stats)){
+            saveJSON(STATS_PREFIX + ym, pkg.stats);
+        }else{
+            saveJSON(STATS_PREFIX + ym, []);
+        }
+
+        // 落库 + 刷新
+        saveJSON(KEY, data);
+        statsRows = loadJSON(STATS_PREFIX + ym, []);
+        render();
+
+        alert(`导入成功：已同步 ${ym} 的数据到页面。`);
+    }
+
+    function handleImportFile(file){
+        const reader = new FileReader();
+        reader.onload = ()=>{
+            try{
+                const text = String(reader.result || "");
+                const pkg = JSON.parse(text);
+                importMonthPackageObject(pkg);
+            }catch(e){
+                alert("导入失败：JSON 解析错误，请检查文件格式。");
+            }
+        };
+        reader.readAsText(file, "utf-8");
+    }
+
+    exportMonthPkgBtn.addEventListener("click", exportMonthPackage);
+    importMonthPkgBtn.addEventListener("click", ()=> importMonthPkgInput.click());
+    importMonthPkgInput.addEventListener("change", ()=>{
+        const f = importMonthPkgInput.files && importMonthPkgInput.files[0];
+        if(!f) return;
+        handleImportFile(f);
+        importMonthPkgInput.value = "";
+    });
+
+    // ========= 年备注表 =========
+    function ymOf(year, month1to12){
+        return `${year}-${pad2(month1to12)}`;
+    }
+    function monthNameCN(m){
+        return `${m}月`;
+    }
+
+    function renderYearNotes(){
+        yearTextEl.textContent = `${yearViewYear} 年 · 12个月备注`;
+        yearGridEl.innerHTML = "";
+
+        for(let m=1; m<=12; m++){
+            const ym = ymOf(yearViewYear, m);
+            const val = localStorage.getItem(noteKeyForYM(ym)) || "";
+
+            const cell = document.createElement("div");
+            cell.className = "yCell";
+
+            const head = document.createElement("div");
+            head.className = "yHead";
+
+            const left = document.createElement("div");
+            left.className = "yMonth";
+            left.textContent = `${monthNameCN(m)}（${ym}）`;
+
+            const tag = document.createElement("div");
+            tag.className = "yTag";
+            tag.textContent = val.trim() ? "有备注" : "空";
+
+            head.appendChild(left);
+            head.appendChild(tag);
+
+            const ta = document.createElement("textarea");
+            ta.className = "yTa";
+            ta.value = val;
+            ta.setAttribute("data-ym", ym);
+            ta.placeholder = "该月备注…（与月度页面同步）";
+
+            let timer = null;
+            ta.addEventListener("input", ()=>{
+                clearTimeout(timer);
+                timer = setTimeout(()=>{
+                    localStorage.setItem(noteKeyForYM(ym), ta.value || "");
+                    tag.textContent = (ta.value || "").trim() ? "有备注" : "空";
+
+                    // 如果月视图当前就是这个月：同步右侧备注框
+                    const curYM = getMonthRange(view).ym;
+                    if(curYM === ym){
+                        noteTa.value = localStorage.getItem(noteKeyForYM(curYM)) || "";
+                    }
+                }, 400);
+            });
+
+            cell.appendChild(head);
+            cell.appendChild(ta);
+            yearGridEl.appendChild(cell);
+        }
+    }
+
+    // ========= 视图切换 =========
+    function showYearView(){
+        yearViewYear = view.getFullYear();
+
+        viewMonthEl.style.display = "none";
+        viewYearEl.style.display = "block";
+        floatCol.style.display = "none";
+
+        btnYearView.style.display = "none";
+        btnBackMonth.style.display = "";
+
+        renderYearNotes();
+        window.scrollTo({top:0, behavior:"smooth"});
+    }
+
+    function showMonthView(){
+        viewYearEl.style.display = "none";
+        viewMonthEl.style.display = "block";
+        if(window.innerWidth > 1100) floatCol.style.display = "flex";
+
+        btnYearView.style.display = "";
+        btnBackMonth.style.display = "none";
+
+        render();
+        window.scrollTo({top:0, behavior:"smooth"});
+    }
+
+    btnYearView.addEventListener("click", showYearView);
+    btnBackMonth.addEventListener("click", showMonthView);
+    backToMonthBtn.addEventListener("click", showMonthView);
+
+    document.getElementById("prevYear").addEventListener("click", ()=>{
+        yearViewYear -= 1;
+        renderYearNotes();
+    });
+    document.getElementById("nextYear").addEventListener("click", ()=>{
+        yearViewYear += 1;
+        renderYearNotes();
+    });
+
+    // ========= 年备注：导出 / 导入 =========
+    const exportYearNotesBtn = document.getElementById("exportYearNotes");
+    const importYearNotesBtn = document.getElementById("importYearNotesBtn");
+    const importYearNotesInput = document.getElementById("importYearNotes");
+
+    function exportYearNotes(){
+        const year = yearViewYear;
+        const months = {};
+        for(let m=1; m<=12; m++){
+            const ym = `${year}-${pad2(m)}`;
+            months[ym] = localStorage.getItem(noteKeyForYM(ym)) || "";
+        }
+        const pkg = {
+            schema: "zrh-year-notes",
+            version: 1,
+            year,
+            exportedAt: new Date().toISOString(),
+            months
+        };
+        const blob = new Blob([JSON.stringify(pkg, null, 2)], {type:"application/json;charset=utf-8"});
+        const a = document.createElement("a");
+        a.href = URL.createObjectURL(blob);
+        a.download = `${year}_年备注_可导入.json`;
+        a.click();
+        setTimeout(()=>URL.revokeObjectURL(a.href), 800);
+    }
+
+    function importYearNotesObject(pkg){
+        if(!pkg || pkg.schema !== "zrh-year-notes"){
+            alert("导入失败：不是可识别的年备注包（schema 不匹配）。");
+            return;
+        }
+        if(!pkg.year || !Number.isFinite(Number(pkg.year))){
+            alert("导入失败：year 不正确。");
+            return;
+        }
+        if(!pkg.months || typeof pkg.months !== "object"){
+            alert("导入失败：months 不正确。");
+            return;
+        }
+
+        const year = Number(pkg.year);
+
+        Object.keys(pkg.months).forEach(ym=>{
+            if(!/^\d{4}-\d{2}$/.test(ym)) return;
+            if(parseInt(ym.slice(0,4),10) !== year) return;
+            const val = String(pkg.months[ym] ?? "");
+            localStorage.setItem(noteKeyForYM(ym), val);
+        });
+
+        if(yearViewYear === year){
+            renderYearNotes();
+        }
+
+        const curYM = getMonthRange(view).ym;
+        if(parseInt(curYM.slice(0,4),10) === year){
+            noteTa.value = localStorage.getItem(noteKeyForYM(curYM)) || "";
+        }
+
+        alert(`导入成功：已写入 ${year} 年备注（12个月）。`);
+    }
+
+    function handleYearNotesFile(file){
+        const reader = new FileReader();
+        reader.onload = ()=>{
+            try{
+                const text = String(reader.result || "");
+                const pkg = JSON.parse(text);
+                importYearNotesObject(pkg);
+            }catch(e){
+                alert("导入失败：JSON 解析错误，请检查文件格式。");
+            }
+        };
+        reader.readAsText(file, "utf-8");
+    }
+
+    exportYearNotesBtn.addEventListener("click", exportYearNotes);
+    importYearNotesBtn.addEventListener("click", ()=> importYearNotesInput.click());
+    importYearNotesInput.addEventListener("change", ()=>{
+        const f = importYearNotesInput.files && importYearNotesInput.files[0];
+        if(!f) return;
+        handleYearNotesFile(f);
+        importYearNotesInput.value = "";
+    });
+
+    // ========= 初始化 =========
+    datePick.value = todayIso();
+    migrateOldNoteIfNeeded();
+    render();
+</script>
+</body>
+</html>
